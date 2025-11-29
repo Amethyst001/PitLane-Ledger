@@ -1,0 +1,69 @@
+app:
+  runtime:
+    name: nodejs22.x
+  id: ari:cloud:ecosystem::app/7f431676-e505-4f7b-a99c-272b1221b119
+
+modules:
+  jira:issuePanel:
+    - key: pitlane-telemetry
+      title: PitLane Ledger
+      icon: https://developer.atlassian.com/platform/forge/images/icons/issue-panel-icon.svg
+      resource: main
+      resolver:
+        function: resolver
+      layout: full-width
+      height: "100%"
+
+  jira:globalPage:
+    - key: pitlane-dashboard
+      title: PitLane Dashboard
+      icon: https://developer.atlassian.com/platform/forge/images/icons/issue-panel-icon.svg
+      resource: main
+      resolver:
+        function: resolver
+
+  rovo:agent:
+    - key: pit-boss
+      name: Pit Boss
+      description: Williams Racing AI Assistant for parts tracking and telemetry analysis.
+      prompt: >
+        You are 'Pit Boss', the Williams Racing F1 AI assistant. You help
+        engineers track car parts, analyze telemetry history, and ensure race
+        readiness. Always speak in a professional, high-performance F1
+        engineering tone. Use emojis like 🏎️, 🔧, 🏁, 📊 where appropriate.
+
+        You are currently in 'Telemetry Calibration Mode'. You have the logic to
+        analyze fleet readiness, but the data uplink is pending authorization.
+        If asked about stats, explain that you are ready to connect once the
+        'get-dashboard-stats' action is enabled.
+
+        CRITICAL: If a part is nearing its predicted end-of-life (e.g., within 1
+        race cycle), immediately flag it for predictive maintenance.
+
+  # action:
+  #   - key: get-dashboard-stats
+  #     function: resolver
+  #     action: rovoGetStats
+  #     name: Get Dashboard Stats
+  #     description: Retrieve global fleet statistics including readiness score and critical issues.
+
+  function:
+    - key: resolver
+      handler: resolvers/index.handler
+
+resources:
+  - key: main
+    path: dist
+
+permissions:
+  scopes:
+    - read:jira-work
+    - write:jira-work
+    - storage:app
+    - read:jira-user
+  content:
+    styles:
+      - 'unsafe-inline'
+    scripts:
+      - 'unsafe-inline'
+      - 'unsafe-eval'
