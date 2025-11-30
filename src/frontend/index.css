@@ -20,11 +20,13 @@
   --color-accent-cyan: #00B8D9;
   --color-accent-blue: #0066CA;
   --color-accent-sky: #00A0DE;
+  --color-accent-purple: #8B5CF6;
+  /* New Purple for In Transit */
 
   /* Semantic */
   --color-success: #00D084;
   --color-warning: #F59E0B;
-  --color-danger: #EF4444;
+  --color-danger: #F04438;
 
   /* Borders */
   --color-border-subtle: #1E293B;
@@ -60,6 +62,9 @@
   /* === GLASSMORPHISM === */
   --glass-bg: rgba(21, 27, 46, 0.7);
   --glass-border: rgba(255, 255, 255, 0.1);
+
+  /* Force dark theme for native controls */
+  color-scheme: dark;
 }
 
 /* === GLOBAL RESETS === */
@@ -105,9 +110,12 @@ body {
 
 /* Pulsing Animation */
 @keyframes pulse {
-  0%, 100% {
+
+  0%,
+  100% {
     opacity: 1;
   }
+
   50% {
     opacity: 0.5;
   }
@@ -139,19 +147,47 @@ body {
   0% {
     background-position: 200% 0;
   }
+
   100% {
     background-position: -200% 0;
   }
 }
 
 .shimmer {
-  background: linear-gradient(
-    90deg,
-    var(--color-bg-surface) 0%,
-    var(--color-bg-surface-alt) 50%,
-    var(--color-bg-surface) 100%
-  );
+  background: linear-gradient(90deg,
+      var(--color-bg-surface) 0%,
+      var(--color-bg-surface-alt) 50%,
+      var(--color-bg-surface) 100%);
   background-size: 200% 100%;
   animation: shimmer 1.5s infinite;
   border-radius: var(--radius-md);
+}
+
+/* === CUSTOM SCROLLBAR === */
+/* Webkit (Chrome, Edge, Safari) */
+::-webkit-scrollbar {
+  width: 12px;
+  /* Slightly wider for better usability */
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg-primary);
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--color-bg-surface-alt);
+  border: 3px solid var(--color-bg-primary);
+  /* Creates a 'floating' look */
+  border-radius: 12px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-text-secondary);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-bg-surface-alt) var(--color-bg-primary);
 }

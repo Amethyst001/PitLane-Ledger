@@ -12,7 +12,7 @@ const STATUS_PRESETS = [
     { value: '🚚 In Transit', label: '🚚 In Transit' }
 ];
 
-const LogEventModal = ({ isOpen, onClose, onSubmit, issueId }) => {
+const LogEventModal = ({ isOpen, onClose, onSubmit, issueId, issueKey, partName }) => {
     const [status, setStatus] = useState(STATUS_PRESETS[0].value);
     const [note, setNote] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -42,7 +42,9 @@ const LogEventModal = ({ isOpen, onClose, onSubmit, issueId }) => {
                 <div style={styles.modalHeader}>
                     <div>
                         <h2 style={styles.modalTitle}>Log Telemetry Event</h2>
-                        <p style={styles.modalSubtitle}>Issue: {issueId}</p>
+                        <p style={styles.modalSubtitle}>
+                            {issueKey || issueId} {partName ? `• ${partName}` : ''}
+                        </p>
                     </div>
                     <button style={styles.closeButton} onClick={onClose} aria-label="Close">
                         <X size={20} />
@@ -75,7 +77,7 @@ const LogEventModal = ({ isOpen, onClose, onSubmit, issueId }) => {
                             Cancel
                         </button>
                         <button type="submit" style={styles.buttonPrimary} disabled={isSubmitting}>
-                            {isSubmitting ? '⏳ Logging...' : '✅ Log Event'}
+                            {isSubmitting ? 'Logging...' : 'Log Event'}
                         </button>
                     </div>
                 </form>

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { invoke } from '@forge/bridge';
 import { Radio, Plus, QrCode, Smartphone } from 'lucide-react';
+import logo from '../pitlane.png';
 import TelemetryTimeline from './TelemetryTimeline';
 import LogEventModal from './LogEventModal';
 import QRCodePanel from './QRCodePanel';
@@ -9,6 +10,10 @@ import MobileControls from './MobileControls';
 const PartDetails = ({ issueId, issueKey, onClose }) => {
     const [history, setHistory] = useState(null);
     const [loading, setLoading] = useState(true);
+    const [allParts, setAllParts] = useState([]);
+    const [searchQuery, setSearchQuery] = useState('');
+    const [currentPartId, setCurrentPartId] = useState(issueId);
+    const [currentPartKey, setCurrentPartKey] = useState(issueKey);
 
     // Modal states
     const [showLogModal, setShowLogModal] = useState(false);
@@ -16,21 +21,30 @@ const PartDetails = ({ issueId, issueKey, onClose }) => {
     const [isMobileMode, setIsMobileMode] = useState(false);
 
     useEffect(() => {
-        if (!issueId) return;
+        if (!currentPartId) return;
 
         setLoading(true);
-        // Seed demo data first, then fetch history
-        invoke('seedDemoData', { issueId })
-            .then(() => invoke('getHistory', { issueId }))
-            .then(data => {
-                setHistory(data);
+        // Seed demo data first, then fetch history and all parts
+        invoke('seedDemoData', { issueId: currentPartId })
+            .then(() => Promise.all([
+                invoke('getHistory', { issueId: currentPartId }),
+                invoke('getAllParts')
+            ]))
+            .then(([historyData, partsData]) => {
+                setHistory(historyData);
+                setAllParts(partsData);
                 setLoading(false);
             })
             .catch(error => {
                 console.error('Error loading telemetry:', error);
                 setLoading(false);
             });
-    }, [issueId]);
+    }, [currentPartId]);
+
+    const handlePartChange = (partId, partKey) => {
+        setCurrentPartId(partId);
+        setCurrentPartKey(partKey);
+    };
 
     const handleLogEvent = async ({ status, note }) => {
         try {
@@ -80,35 +94,87 @@ const PartDetails = ({ issueId, issueKey, onClose }) => {
 
     return (
         <div style={styles.container}>
-            {/* Header */}
+            {/* Header - Mobile-First Redesign */}
             <div style={styles.header}>
-                <div>
-                    <h1 className="gradient-text" style={styles.title}>
-                        🏁 PitLane Ledger
-                    </h1>
-                    <p style={styles.subtitle}>
-                        Williams Parts Passport • {issueKey || issueId}
-                    </p>
-                </div>
-
-                <div style={styles.headerActions}>
+                {/* Top Row: Logo, Title, Live Badge */}
+                <div style={styles.headerTop}>
+                    <div style={styles.logoTitleGroup}>
+                        <img src={logo} alt="Williams Racing" style={styles.logo} />
+                        <div>
+                            <h1 className="gradient-text" style={styles.title}>
+                                🏁 PitLane Ledger
+                            </h1>
+                            <p style={styles.subtitle}>
+                                Williams Parts Passport • {currentPartKey || currentPartId}
+                            </p>
+                        </div>
+                    </div>
                     <div style={styles.liveBadge}>
                         <Radio size={14} className="pulse" style={{ color: 'var(--color-success)' }} />
                         <span style={styles.liveBadgeText}>Live</span>
                     </div>
+                </div>
 
-                    <button onClick={() => setShowLogModal(true)} style={styles.actionButton} title="Log Event">
-                        <Plus size={16} />
-                        <span>Log Event</span>
-                    </button>
+                {/* Bottom Row: Search, Selector, Actions */}
+                <div style={styles.headerBottom}>
+                    {allParts.length > 0 && (
+                        <div style={styles.searchGroup}>
+                            <input
+                                type="text"
+                                placeholder="Search parts..."
+                                value={searchQuery}
+                                onChange={(e) => setSearchQuery(e.target.value)}
+                                style={styles.searchInput}
+                            />
+                            <select
+                                value={currentPartId}
+                                onChange={(e) => {
+                                    const selectedPart = allParts.find(p => p.id === e.target.value);
+                                    if (selectedPart) {
+                                        handlePartChange(selectedPart.id, selectedPart.key);
+                                    }
+                                }}
+                                style={styles.partSelector}
+                            >
+                                {allParts
+                                    .filter(p => !['RETIRED', 'SCRAPPED'].includes(p.pitlaneStatus))
+                                    .filter(p =>
+                                        !searchQuery ||
+                                        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                        p.key.toLowerCase().includes(searchQuery.toLowerCase())
+                                    )
+                                    .map(part => (
+                                        <option
+                                            key={part.id}
+                                            value={part.id}
+                                            style={{ background: '#0A0E1A', color: 'white' }}
+                                        >
+                                            {part.key} - {part.name}
+                                        </option>
+                                    ))
+                                }
+                            </select>
+                        </div>
+                    )}
 
-                    <button onClick={() => setShowQRPanel(true)} style={styles.actionButtonSecondary} title="QR Code">
-                        <QrCode size={16} />
-                    </button>
+                    <div style={styles.actionGroup}>
+                        <button onClick={() => setShowLogModal(true)} style={styles.actionButton} title="Log Event">
+                            <Plus size={16} />
+                            <span>Log Event</span>
+                        </button>
 
-                    <button onClick={() => setIsMobileMode(true)} style={styles.actionButtonSecondary} title="Simulate Mobile">
-                        <Smartphone size={16} />
-                    </button>
+                        <div style={styles.dividerVertical} />
+
+                        <div style={styles.iconGroup}>
+                            <button onClick={() => setShowQRPanel(true)} style={styles.actionButtonSecondary} title="QR Code">
+                                <QrCode size={16} />
+                            </button>
+
+                            <button onClick={() => setIsMobileMode(true)} style={styles.actionButtonSecondary} title="Pit Crew">
+                                <Smartphone size={16} />
+                            </button>
+                        </div>
+                    </div>
                 </div>
             </div>
 
@@ -168,30 +234,100 @@ const styles = {
         color: 'var(--color-text-primary)'
     },
     header: {
-        display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start',
-        marginBottom: 'var(--spacing-xl)', paddingBottom: 'var(--spacing-lg)',
+        marginBottom: 'var(--spacing-xl)',
+        paddingBottom: 'var(--spacing-lg)',
         borderBottom: '1px solid var(--color-border-subtle)'
     },
-    headerActions: { display: 'flex', alignItems: 'center', gap: 'var(--spacing-sm)' },
+    headerTop: {
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        marginBottom: '16px',
+        gap: '12px',
+        flexWrap: 'wrap'
+    },
+    logoTitleGroup: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '16px',
+        flex: '1 1 auto'
+    },
+    logo: {
+        height: '40px',
+        width: 'auto',
+        objectFit: 'contain',
+        filter: 'drop-shadow(0 2px 8px rgba(0, 184, 217, 0.3))'
+    },
+    headerBottom: {
+        display: 'flex',
+        gap: '12px',
+        flexWrap: 'wrap',
+        alignItems: 'center'
+    },
+    searchGroup: {
+        display: 'flex',
+        gap: '12px',
+        flex: '1 1 auto',
+        minWidth: '300px'
+    },
+    searchInput: {
+        background: 'rgba(0, 184, 217, 0.08)',
+        border: '2px solid var(--color-accent-cyan)',
+        borderRadius: '8px',
+        padding: '10px 14px',
+        color: 'white',
+        fontSize: '13px',
+        fontWeight: 500,
+        flex: '0 1 180px',
+        outline: 'none'
+    },
+    partSelector: {
+        background: 'rgba(0, 184, 217, 0.15)',
+        border: '2px solid var(--color-accent-cyan)',
+        borderRadius: '8px',
+        padding: '10px 16px',
+        color: 'var(--color-accent-cyan)',
+        fontSize: '13px',
+        fontWeight: 600,
+        flex: '1 1 auto',
+        maxWidth: '500px',
+        cursor: 'pointer',
+        outline: 'none'
+    },
+    actionGroup: {
+        display: 'flex',
+        alignItems: 'center',
+        gap: '8px'
+    },
+    iconGroup: {
+        display: 'flex',
+        gap: '8px'
+    },
+    dividerVertical: {
+        width: '1px',
+        height: '24px',
+        backgroundColor: 'var(--color-border-subtle)',
+        margin: '0 4px'
+    },
     actionButton: {
-        display: 'flex', alignItems: 'center', gap: 'var(--spacing-xs)', padding: '8px 16px',
+        display: 'flex', alignItems: 'center', gap: 'var(--spacing-xs)', padding: '10px 16px',
         backgroundColor: 'var(--color-accent-cyan)', color: 'var(--color-bg-primary)',
-        border: '2px solid var(--color-accent-cyan)', borderRadius: 'var(--radius-sm)',
+        border: '2px solid var(--color-accent-cyan)', borderRadius: '8px',
         fontSize: '13px', fontWeight: '600', cursor: 'pointer', transition: 'all var(--transition-normal)',
         boxShadow: '0 0 15px rgba(0, 184, 217, 0.3)'
     },
     actionButtonSecondary: {
-        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '8px',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '10px',
         backgroundColor: 'transparent', color: 'var(--color-accent-cyan)',
-        border: '2px solid var(--color-accent-cyan)', borderRadius: 'var(--radius-sm)',
+        border: '2px solid var(--color-accent-cyan)', borderRadius: '8px',
         cursor: 'pointer', transition: 'all var(--transition-normal)'
     },
-    title: { fontSize: '28px', fontWeight: '700', margin: 0, letterSpacing: '-0.02em', lineHeight: '1.2' },
-    subtitle: { fontSize: '14px', color: 'var(--color-text-secondary)', marginTop: 'var(--spacing-sm)', fontWeight: '400' },
+    title: { fontSize: '24px', fontWeight: '700', margin: 0, letterSpacing: '-0.02em', lineHeight: '1.2' },
+    subtitle: { fontSize: '13px', color: 'var(--color-text-secondary)', marginTop: '4px', fontWeight: '400' },
     liveBadge: {
-        display: 'flex', alignItems: 'center', gap: 'var(--spacing-xs)', padding: '6px 12px',
-        backgroundColor: 'rgba(0, 208, 132, 0.15)', border: '1px solid rgba(0, 208, 132, 0.3)',
-        borderRadius: 'var(--radius-sm)', fontSize: '13px', fontWeight: '600'
+        display: 'flex', alignItems: 'center', gap: 'var(--spacing-xs)', padding: '8px 14px',
+        backgroundColor: 'rgba(0, 208, 132, 0.15)', border: '2px solid rgba(0, 208, 132, 0.4)',
+        borderRadius: '8px', fontSize: '13px', fontWeight: '600'
     },
     liveBadgeText: { color: 'var(--color-success)' },
     statsBar: {

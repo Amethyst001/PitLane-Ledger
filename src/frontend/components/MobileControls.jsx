@@ -5,6 +5,7 @@ import { CheckCircle, AlertTriangle, ArrowLeft } from 'lucide-react';
 const MobileControls = ({ issueId, onReturn, onEventLogged }) => {
     const [isLogging, setIsLogging] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
+    const [lastAction, setLastAction] = useState('');
 
     const handleQuickLog = async (status) => {
         setIsLogging(true);
@@ -16,8 +17,9 @@ const MobileControls = ({ issueId, onReturn, onEventLogged }) => {
                 note: `Quick log from pit crew mobile at ${new Date().toLocaleTimeString()}`
             });
 
+            setLastAction(status);
             setShowSuccess(true);
-            setTimeout(() => setShowSuccess(false), 2000);
+            setTimeout(() => setShowSuccess(false), 2500);
 
             if (onEventLogged) onEventLogged();
         } catch (error) {
@@ -47,14 +49,22 @@ const MobileControls = ({ issueId, onReturn, onEventLogged }) => {
                 </button>
             </div>
 
-            {/* Subtle Toast Notification */}
             <div style={{
                 ...styles.toast,
                 transform: showSuccess ? 'translateY(0)' : 'translateY(100px)',
                 opacity: showSuccess ? 1 : 0
             }}>
                 <CheckCircle size={24} color="#00D084" />
-                <span>Event Logged Successfully</span>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
+                    <span style={{ fontWeight: '700' }}>Event Logged Successfully</span>
+                    <span style={{ fontSize: '13px', opacity: 0.8 }}>
+                        {lastAction === '✅ Cleared for Race'
+                            ? 'Part verified and cleared for track use'
+                            : lastAction === '⚠️ DAMAGED'
+                                ? 'Part flagged as damaged - requires inspection'
+                                : ''}
+                    </span>
+                </div>
             </div>
 
             <button onClick={onReturn} style={styles.returnButton}>
@@ -73,7 +83,7 @@ const styles = {
     buttonContainer: { flex: 1, display: 'flex', flexDirection: 'column', gap: 'var(--spacing-lg)', marginBottom: 'var(--spacing-xl)' },
     bigButton: { flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 'var(--spacing-md)', border: 'none', borderRadius: 'var(--radius-lg)', fontSize: '24px', fontWeight: '700', cursor: 'pointer', minHeight: '200px', textTransform: 'uppercase', letterSpacing: '0.05em', transition: 'transform 0.1s' },
     greenButton: { backgroundColor: 'rgba(0, 208, 132, 0.1)', color: '#00D084', border: '2px solid #00D084' },
-    redButton: { backgroundColor: 'rgba(239, 68, 68, 0.1)', color: '#EF4444', border: '2px solid #EF4444' },
+    redButton: { backgroundColor: 'rgba(240, 68, 56, 0.1)', color: '#F04438', border: '2px solid #F04438' },
     buttonText: { fontSize: '24px', fontWeight: '700' },
     toast: {
         position: 'fixed', bottom: '32px', left: '50%', transform: 'translateX(-50%)',

@@ -17,19 +17,29 @@ const CarConfigurator = ({ onPartSelect, parts }) => {
     const getZoneStatus = (zoneName) => {
         if (!parts || parts.length === 0) return 'OK';
 
-        const zoneParts = parts.filter(part => getZoneForPart(part.name) === zoneName);
+        // Filter for parts in this zone, EXCLUDING retired/scrapped
+        const zoneParts = parts.filter(part =>
+            getZoneForPart(part.name) === zoneName &&
+            !['RETIRED', 'SCRAPPED'].includes(part.pitlaneStatus)
+        );
+
         if (zoneParts.length === 0) return 'OK';
 
-        const hasDamaged = zoneParts.some(p => p.pitlaneStatus?.includes('DAMAGED'));
-        const hasTransit = zoneParts.some(p => p.pitlaneStatus?.includes('Transit'));
-        const hasManufactured = zoneParts.some(p => p.pitlaneStatus?.includes('Manufactured'));
-        const hasTrackside = zoneParts.some(p => p.pitlaneStatus?.includes('Trackside'));
-        const hasCritical = zoneParts.some(p => p.predictiveStatus === 'CRITICAL');
+        // 1. CRITICAL (Red): DAMAGED or Life <= 1
+        const hasCritical = zoneParts.some(p =>
+            p.pitlaneStatus?.includes('DAMAGED') ||
+            p.lifeRemaining <= 1
+        );
+        if (hasCritical) return 'CRITICAL';
 
-        if (hasDamaged || hasCritical) return 'CRITICAL';
-        if (hasTransit) return 'WARNING';
-        if (hasManufactured) return 'CAUTION';
-        if (hasTrackside) return 'OK';
+        // 2. WARNING (Orange): IN TRANSIT or Life == 2
+        const hasWarning = zoneParts.some(p =>
+            p.pitlaneStatus?.includes('Transit') ||
+            p.lifeRemaining === 2
+        );
+        if (hasWarning) return 'WARNING';
+
+        // 3. OK (Green): TRACKSIDE and Life > 2 (Implicit if not Critical or Warning)
         return 'OK';
     };
 
@@ -54,10 +64,10 @@ const CarConfigurator = ({ onPartSelect, parts }) => {
 
         if (status === 'CRITICAL') {
             return {
-                fill: isActive ? 'rgba(239, 68, 68, 0.7)' : 'rgba(239, 68, 68, 0.4)',
-                stroke: isActive ? '#FF0000' : '#EF4444',
+                fill: isActive ? 'rgba(240, 68, 56, 0.7)' : 'rgba(240, 68, 56, 0.4)',
+                stroke: isActive ? '#F04438' : '#F04438',
                 strokeWidth: isActive ? activeStroke : inactiveStroke,
-                glow: '0 0 20px rgba(239, 68, 68, 0.8)'
+                glow: '0 0 20px rgba(240, 68, 56, 0.8)'
             };
         } else if (status === 'WARNING') {
             return {
@@ -94,10 +104,10 @@ const CarConfigurator = ({ onPartSelect, parts }) => {
         <div style={{
             background: '#151B2E',
             borderRadius: '16px',
-            marginBottom: '24px',
             border: '1px solid var(--color-border-subtle)',
             overflow: 'hidden',
-            boxShadow: 'var(--shadow-soft)'
+            boxShadow: 'var(--shadow-soft)',
+            height: '450px' // Fixed height to match PredictiveTimeline
         }}>
             <div style={{
                 padding: '20px',
@@ -151,7 +161,7 @@ const CarConfigurator = ({ onPartSelect, parts }) => {
                             <stop offset="50%" stopColor="#222" />
                             <stop offset="100%" stopColor="#444" />
                         </linearGradient>
-                        <path id="monocoqueCurve" d="M 160,135 Q 200,115 240,122" fill="none" />
+                        <path id="monocoqueCurve" d="M 160,132 Q 200,118 240,120" fill="none" />
                     </defs>
 
                     {/* Monocoque with raised halo */}
@@ -216,7 +226,7 @@ const CarConfigurator = ({ onPartSelect, parts }) => {
                     {/* Text Labels */}
                     <g style={{ pointerEvents: 'none' }}>
                         {/* MONOCOQUE curved along path */}
-                        <text fontSize="11" fontWeight="700" letterSpacing="1px" fill={monocoqueStyle.stroke}>
+                        <text fontSize="11" fontWeight="700" letterSpacing="1px" fill={monocoqueStyle.stroke} dy="-2">
                             <textPath href="#monocoqueCurve" startOffset="50%" textAnchor="middle">
                                 MONOCOQUE
                             </textPath>

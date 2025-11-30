@@ -37,8 +37,8 @@ const getIconForStatus = (status) => {
 const getColorForStatus = (status) => {
     const statusLower = status.toLowerCase();
 
-    if (statusLower.includes('damaged') || statusLower.includes('failed')) {
-        return '#EF4444';
+    if (statusLower.includes('damaged') || statusLower.includes('failed') || statusLower.includes('critical')) {
+        return '#F04438';
     }
     if (statusLower.includes('quality') || statusLower.includes('passed') || statusLower.includes('trackside')) {
         return '#00D084';
