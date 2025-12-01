@@ -138,7 +138,31 @@ const styles = {
     row: { display: 'flex', gap: '12px', alignItems: 'center' },
     input: {
         flex: 2, background: '#0A0E1A', border: '1px solid var(--color-border-subtle)',
-        display: 'flex', justifyContent: 'flex-end', gap: '12px'
+        color: '#fff', padding: '8px 12px', borderRadius: '6px', fontSize: '14px', outline: 'none'
+    },
+    dateInput: {
+        flex: 1, background: '#0A0E1A', border: '1px solid var(--color-border-subtle)',
+        color: '#fff', padding: '8px 12px', borderRadius: '6px', fontSize: '14px', outline: 'none',
+        colorScheme: 'dark'
+    },
+    deleteBtn: {
+        background: 'rgba(239, 68, 68, 0.1)', border: 'none', color: '#EF4444',
+        width: '32px', height: '32px', borderRadius: '6px', cursor: 'pointer',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s'
+    },
+    addBtn: {
+        background: 'rgba(0, 208, 132, 0.1)', border: '1px dashed rgba(0, 208, 132, 0.3)',
+        color: '#00D084', padding: '10px', borderRadius: '8px', cursor: 'pointer',
+        display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px',
+        fontSize: '13px', fontWeight: 600, marginTop: '8px', transition: 'all 0.2s'
+    },
+    footer: {
+        padding: '20px', borderTop: '1px solid var(--color-border-subtle)',
+        display: 'flex', justifyContent: 'flex-end', gap: '12px', background: 'rgba(0,0,0,0.2)'
+    },
+    error: {
+        color: '#EF4444', fontSize: '13px', marginTop: '10px', padding: '10px',
+        background: 'rgba(239, 68, 68, 0.1)', borderRadius: '6px', textAlign: 'center'
     },
     cancelBtn: {
         background: 'transparent', border: '1px solid var(--color-border-subtle)',

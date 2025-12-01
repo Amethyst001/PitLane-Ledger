@@ -1,7 +1,7 @@
 import React from 'react';
 import { AlertTriangle, Calendar, Wrench } from 'lucide-react';
 
-const PredictiveTimeline = ({ parts }) => {
+const PredictiveTimeline = ({ parts, onOpenSettings }) => {
     const upcomingRaces = [
         { name: 'Bahrain GP', date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000), daysAway: 3 },
         { name: 'Saudi Arabian GP', date: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000), daysAway: 10 },
@@ -18,6 +18,9 @@ const PredictiveTimeline = ({ parts }) => {
         <div style={styles.container}>
             <div style={styles.header}>
                 <h3 style={styles.title}>Predictive Timeline</h3>
+                <button onClick={onOpenSettings} style={styles.iconButton} title="Manage Calendar">
+                    <Calendar size={16} />
+                </button>
             </div>
 
             {/* Upcoming End-of-Life Warnings */}
@@ -107,6 +110,21 @@ const styles = {
         padding: '20px',
         borderBottom: '1px solid var(--color-border-subtle)',
         background: 'rgba(255, 255, 255, 0.02)',
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    iconButton: {
+        background: 'transparent',
+        border: 'none',
+        color: 'var(--color-text-secondary)',
+        cursor: 'pointer',
+        padding: '4px',
+        borderRadius: '4px',
+        transition: 'color 0.2s',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
     },
     title: {
         margin: 0,

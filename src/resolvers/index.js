@@ -97,8 +97,7 @@ function uuid() {
 export const handler = async (event, context) => {
   console.log("🚀 [DEBUG] RAW HANDLER INVOKED");
   console.log("🚀 [DEBUG] Event Keys:", Object.keys(event));
-  if (event.context) console.log("🚀 [DEBUG] Event Context:", JSON.stringify(event.context, null, 2));
-  if (context) console.log("🚀 [DEBUG] Global Context:", JSON.stringify(context, null, 2));
+
 
   // 1. ROBUST KEY EXTRACTION
   let functionKey =
@@ -116,9 +115,7 @@ export const handler = async (event, context) => {
   if (!functionKey && typeof event.call === 'string') functionKey = event.call;
   if (!functionKey && typeof event === 'string') functionKey = event;
 
-  console.log(`🚀 [DEBUG] Extracted Function Key: ${functionKey}`);
-  console.log(`🚀 [DEBUG] Event Keys: ${Object.keys(event).join(', ')}`);
-  if (event.call) console.log(`🚀 [DEBUG] Event.call: ${JSON.stringify(event.call)}`);
+
 
   // 2. DISPATCH LOGIC
   try {
@@ -132,7 +129,6 @@ export const handler = async (event, context) => {
 
     if (functionKey === 'getAllParts') {
       const parts = getMockParts();
-      console.log(`🚀 [RESOLVER] getAllParts returning ${parts.length} parts`);
       return parts;
     }
 

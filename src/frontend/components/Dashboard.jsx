@@ -30,7 +30,7 @@ const Dashboard = () => {
     const fetchData = async () => {
         setLoading(true);
         try {
-            console.log("🚀 [DASHBOARD] Fetching data...");
+
             const [allParts, calendar, drivers, isFirstLoad] = await Promise.all([
                 invoke('getAllParts', { key: 'getAllParts' }),
                 invoke('getRaceCalendar', { key: 'getRaceCalendar' }),
@@ -38,7 +38,7 @@ const Dashboard = () => {
                 invoke('checkInitialLoad', { issueId: null })
             ]);
 
-            console.log("🚀 [DASHBOARD] getAllParts response:", allParts);
+
 
             setParts(Array.isArray(allParts) ? allParts : []);
             setRaceCalendar(calendar);
@@ -82,12 +82,28 @@ const Dashboard = () => {
         const matchesVisual = visualFilter ? part.name.toLowerCase().includes(visualFilter.toLowerCase()) : true;
         return matchesSearch && matchesVisual;
     }).sort((a, b) => {
-        // Sort RETIRED/SCRAPPED to the bottom
+        // 1. Sort RETIRED/SCRAPPED to the bottom
         const isARetired = ['RETIRED', 'SCRAPPED'].includes(a.pitlaneStatus);
         const isBRetired = ['RETIRED', 'SCRAPPED'].includes(b.pitlaneStatus);
         if (isARetired && !isBRetired) return 1;
         if (!isARetired && isBRetired) return -1;
-        return 0;
+
+        // 2. Sort by Assignment (Car 1 -> Car 2 -> Spares -> Others)
+        const getAssignmentPriority = (assignment) => {
+            if (!assignment) return 4;
+            if (assignment.includes('Car 1')) return 1;
+            if (assignment.includes('Car 2')) return 2;
+            if (assignment.includes('Spares')) return 3;
+            return 4;
+        };
+
+        const priorityA = getAssignmentPriority(a.assignment);
+        const priorityB = getAssignmentPriority(b.assignment);
+
+        if (priorityA !== priorityB) return priorityA - priorityB;
+
+        // 3. Alphabetical by Name
+        return a.name.localeCompare(b.name);
     });
 
     const readinessScore = stats.total > 0 ? Math.round((stats.trackside / stats.total) * 100) : 0;
@@ -150,8 +166,8 @@ const Dashboard = () => {
                         <RotateCcw size={14} />
                         Reset Onboarding
                     </button>
-                </div >
-            </header >
+                </div>
+            </header>
 
             <div style={styles.grid}>
                 <StatCard title="Total Inventory" value={stats.total} icon={<Package size={20} />} color="#00A0E3" sub={`Synced: ${lastSynced.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`} />
@@ -202,9 +218,9 @@ const Dashboard = () => {
                                                     {isRetired ? (
                                                         <span style={{ color: 'var(--color-text-muted)' }}>-</span>
                                                     ) : part.assignment ? (
-                                                        <span style={getAssignmentStyle(part.assignment)} title={part.assignment === 'Car 1' ? driverNames.car1 : part.assignment === 'Car 2' ? driverNames.car2 : 'Shared Pool'}>
-                                                            {part.assignment === 'Car 1' ? `🔵 23 ${driverNames.car1.split(' ').pop()}` :
-                                                                part.assignment === 'Car 2' ? `🟡 55 ${driverNames.car2.split(' ').pop()}` :
+                                                        <span style={getAssignmentStyle(part.assignment)} title={part.assignment && part.assignment.includes('Car 1') ? driverNames.car1 : part.assignment && part.assignment.includes('Car 2') ? driverNames.car2 : 'Shared Pool'}>
+                                                            {part.assignment && part.assignment.includes('Car 1') ? `🔵 23 ${driverNames.car1.split(' ').pop()}` :
+                                                                part.assignment && part.assignment.includes('Car 2') ? `🟡 55 ${driverNames.car2.split(' ').pop()}` :
                                                                     '⚪ Spares'}
                                                         </span>
                                                     ) : (
