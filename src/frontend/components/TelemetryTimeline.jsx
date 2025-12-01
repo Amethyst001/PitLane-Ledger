@@ -1,34 +1,40 @@
 import React from 'react';
 import { VerticalTimeline, VerticalTimelineElement } from 'react-vertical-timeline-component';
 import 'react-vertical-timeline-component/style.min.css';
-import { Factory, Wrench, CheckCircle, Package, Plane, Flag, AlertTriangle, Truck } from 'lucide-react';
+import { Factory, Wrench, CheckCircle, Package, Plane, Flag, AlertTriangle, Truck, ClipboardCheck } from 'lucide-react';
 
 /**
  * Icon mapping for different event statuses
  */
 const getIconForStatus = (status) => {
-    if (!status) return 'var(--color-text-secondary)';
+    if (!status) return <Wrench size={20} />;
     const statusLower = status.toLowerCase();
 
-    if (statusLower.includes('manufactured') || statusLower.includes('forged')) {
+    if (statusLower.includes('manufactured') || statusLower.includes('forged') || statusLower.includes('assembly')) {
         return <Factory size={20} />;
     }
-    if (statusLower.includes('quality') || statusLower.includes('testing') || statusLower.includes('passed')) {
+    if (statusLower.includes('inspection') || statusLower.includes('review')) {
+        return <ClipboardCheck size={20} />;
+    }
+    if (statusLower.includes('quality') || statusLower.includes('testing') || statusLower.includes('passed') || statusLower.includes('certified')) {
         return <CheckCircle size={20} />;
     }
-    if (statusLower.includes('packaged') || statusLower.includes('sealed')) {
+    if (statusLower.includes('packaged') || statusLower.includes('sealed') || statusLower.includes('received') || statusLower.includes('receive') || statusLower.includes('ordered')) {
         return <Package size={20} />;
     }
-    if (statusLower.includes('transit') || statusLower.includes('shipped')) {
+    if (statusLower.includes('transit') || statusLower.includes('shipped') || statusLower.includes('flight')) {
         return <Plane size={20} />;
     }
     if (statusLower.includes('trackside') || statusLower.includes('arrived')) {
         return <Flag size={20} />;
     }
-    if (statusLower.includes('damaged') || statusLower.includes('failed') || statusLower.includes('alert')) {
+    if (statusLower.includes('damaged') || statusLower.includes('failed') || statusLower.includes('alert') || statusLower.includes('wear') || statusLower.includes('warning')) {
         return <AlertTriangle size={20} />;
     }
-    if (statusLower.includes('delivery')) {
+    if (statusLower.includes('assigned') || statusLower.includes('install') || statusLower.includes('fitted') || statusLower.includes('service')) {
+        return <Wrench size={20} />;
+    }
+    if (statusLower.includes('deliver') || statusLower.includes('dispatched')) {
         return <Truck size={20} />;
     }
 

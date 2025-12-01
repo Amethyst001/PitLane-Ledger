@@ -71,9 +71,27 @@ const PartDetails = ({ issueId, issueKey, onClose }) => {
         fetchData();
     }, [issueId, issueKey]);
 
-    const handlePartChange = (partId, partKey) => {
+    const handlePartChange = async (partId, partKey) => {
+        console.log('[PartDetails] handlePartChange called with:', { partId, partKey });
         setCurrentPartId(partId);
         setCurrentPartKey(partKey);
+
+        // Immediately fetch new data
+        setLoading(true);
+        try {
+            const query = partKey || partId;
+            console.log('[PartDetails] Fetching history for new part:', query);
+
+            const historyData = await invoke('getHistory', { key: 'getHistory', query });
+            console.log('[PartDetails] New historyData:', historyData);
+
+            const historyArray = historyData.history || (Array.isArray(historyData) ? historyData : []);
+            setHistory(historyArray);
+            setLoading(false);
+        } catch (error) {
+            console.error('[PartDetails] Error loading new part:', error);
+            setLoading(false);
+        }
     };
 
     const handleLogEvent = async ({ status, note }) => {
@@ -162,9 +180,9 @@ const PartDetails = ({ issueId, issueKey, onClose }) => {
                                 style={styles.searchInput}
                             />
                             <select
-                                value={currentPartId}
+                                value={currentPartKey}
                                 onChange={(e) => {
-                                    const selectedPart = allParts.find(p => p.id === e.target.value);
+                                    const selectedPart = allParts.find(p => p.key === e.target.value);
                                     if (selectedPart) {
                                         handlePartChange(selectedPart.id, selectedPart.key);
                                     }
@@ -181,7 +199,7 @@ const PartDetails = ({ issueId, issueKey, onClose }) => {
                                     .map(part => (
                                         <option
                                             key={part.id}
-                                            value={part.id}
+                                            value={part.key}
                                             style={{ background: '#0A0E1A', color: 'white' }}
                                         >
                                             {part.key} - {part.name}
@@ -231,7 +249,7 @@ const PartDetails = ({ issueId, issueKey, onClose }) => {
                 <div style={styles.statDivider} />
                 <div style={styles.statItem}>
                     <div style={styles.statValue}>
-                        {history?.[history.length - 1]?.status?.split(' ')[0] || '—'}
+                        {history?.[0]?.status?.split(' ')[0] || '—'}
                     </div>
                     <div style={styles.statLabel}>Status</div>
                 </div>

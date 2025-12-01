@@ -183,14 +183,52 @@ export const handler = async (event, context) => {
       const parts = getMockParts();
       const part = parts.find(p => p.key === query || p.name === query);
       if (!part) return { error: `Part '${query}' not found.` };
-      return {
-        part: part,
-        history: [
-          { id: uuid(), timestamp: new Date().toISOString(), status: '🔍 INSPECTION', note: 'Routine check passed - Chief Mechanic' },
-          { id: uuid(), timestamp: new Date(Date.now() - 86400000).toISOString(), status: `🔧 INSTALL`, note: `Fitted to ${part.assignment} - Mechanic A` },
-          { id: uuid(), timestamp: new Date(Date.now() - 7 * 86400000).toISOString(), status: '📦 RECEIVE', note: 'Arrived at track - Logistics Mgr' }
-        ]
-      };
+
+      // Generate UNIQUE history based on part's actual pitlaneStatus with 4-6 events
+      const history = [];
+      const lastUpdate = new Date(part.lastUpdated).getTime();
+
+      // Build history from NEWEST to OLDEST
+      if (part.pitlaneStatus === '🏁 Trackside') {
+        history.push({ id: uuid(), timestamp: new Date(lastUpdate).toISOString(), status: 'TRACKSIDE', note: `Deployed to ${part.location} for race ops` });
+        history.push({ id: uuid(), timestamp: new Date(lastUpdate - 1 * 86400000).toISOString(), status: 'INSPECTION', note: 'Pre-race technical inspection passed' });
+        if (part.assignment && part.assignment !== 'Spares') {
+          history.push({ id: uuid(), timestamp: new Date(lastUpdate - 3 * 86400000).toISOString(), status: 'ASSIGNED', note: `Allocated to ${part.assignment}` });
+        }
+        history.push({ id: uuid(), timestamp: new Date(lastUpdate - 7 * 86400000).toISOString(), status: 'DELIVERED', note: 'Arrived at circuit via air freight' });
+        history.push({ id: uuid(), timestamp: new Date(lastUpdate - 10 * 86400000).toISOString(), status: 'QUALITY CHECK', note: 'Factory verification complete' });
+        history.push({ id: uuid(), timestamp: new Date(lastUpdate - 15 * 86400000).toISOString(), status: 'RECEIVED', note: `Component logged - Serial: ${part.key}` });
+
+      } else if (part.pitlaneStatus === '✈️ In Transit') {
+        history.push({ id: uuid(), timestamp: new Date(lastUpdate).toISOString(), status: 'IN TRANSIT', note: `En route via ${part.location}` });
+        history.push({ id: uuid(), timestamp: new Date(lastUpdate - 1 * 86400000).toISOString(), status: 'DISPATCHED', note: 'Shipped from Grove facility' });
+        history.push({ id: uuid(), timestamp: new Date(lastUpdate - 4 * 86400000).toISOString(), status: 'QUALITY CHECK', note: 'Pre-shipment inspection passed' });
+        history.push({ id: uuid(), timestamp: new Date(lastUpdate - 8 * 86400000).toISOString(), status: 'PACKAGED', note: 'Sealed in transport case' });
+        history.push({ id: uuid(), timestamp: new Date(lastUpdate - 12 * 86400000).toISOString(), status: 'RECEIVED', note: `Component logged - Serial: ${part.key}` });
+
+      } else if (part.pitlaneStatus === '⚠️ DAMAGED') {
+        history.push({ id: uuid(), timestamp: new Date(lastUpdate).toISOString(), status: 'DAMAGE DETECTED', note: `Component failure - quarantined at ${part.location}` });
+        history.push({ id: uuid(), timestamp: new Date(lastUpdate - 1 * 86400000).toISOString(), status: 'INSPECTION FAILED', note: `Structural integrity compromised - ${part.life}% remaining` });
+        history.push({ id: uuid(), timestamp: new Date(lastUpdate - 2 * 86400000).toISOString(), status: 'WEAR WARNING', note: 'Abnormal degradation detected during monitoring' });
+        history.push({ id: uuid(), timestamp: new Date(lastUpdate - 5 * 86400000).toISOString(), status: 'IN SERVICE', note: 'Deployed for race weekend' });
+        history.push({ id: uuid(), timestamp: new Date(lastUpdate - 8 * 86400000).toISOString(), status: 'CERTIFIED', note: 'FIA compliance verified' });
+        history.push({ id: uuid(), timestamp: new Date(lastUpdate - 12 * 86400000).toISOString(), status: 'RECEIVED', note: `Component logged - Serial: ${part.key}` });
+
+      } else if (part.pitlaneStatus === '🏭 Manufactured') {
+        history.push({ id: uuid(), timestamp: new Date(lastUpdate).toISOString(), status: 'MANUFACTURED', note: `Production completed at ${part.location}` });
+        history.push({ id: uuid(), timestamp: new Date(lastUpdate - 2 * 86400000).toISOString(), status: 'QUALITY CHECK', note: 'All specifications verified - ready for deployment' });
+        history.push({ id: uuid(), timestamp: new Date(lastUpdate - 6 * 86400000).toISOString(), status: 'TESTING', note: 'Material stress testing complete' });
+        history.push({ id: uuid(), timestamp: new Date(lastUpdate - 10 * 86400000).toISOString(), status: 'ASSEMBLY', note: 'Component fabrication in progress' });
+        history.push({ id: uuid(), timestamp: new Date(lastUpdate - 14 * 86400000).toISOString(), status: 'ORDERED', note: 'Manufacturing request approved' });
+
+      } else {
+        // Fallback
+        history.push({ id: uuid(), timestamp: new Date(lastUpdate).toISOString(), status: part.pitlaneStatus.replace(/[^a-zA-Z ]/g, '').trim().toUpperCase(), note: `Current location: ${part.location}` });
+        history.push({ id: uuid(), timestamp: new Date(lastUpdate - 3 * 86400000).toISOString(), status: 'INSPECTION', note: 'Routine status check' });
+        history.push({ id: uuid(), timestamp: new Date(lastUpdate - 7 * 86400000).toISOString(), status: 'RECEIVED', note: `Component logged - Serial: ${part.key}` });
+      }
+
+      return { part: part, history: history };
     }
 
     if (functionKey === 'rovoGetRaceCalendar' || functionKey === 'get-race-calendar' || functionKey === 'getRaceCalendar') {
