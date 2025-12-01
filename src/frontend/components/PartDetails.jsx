@@ -8,6 +8,8 @@ import QRCodePanel from './QRCodePanel';
 import MobileControls from './MobileControls';
 
 const PartDetails = ({ issueId, issueKey, onClose }) => {
+    console.log('[PartDetails] Component mounted/updated with props:', { issueId, issueKey });
+
     const [history, setHistory] = useState(null);
     const [loading, setLoading] = useState(true);
     const [allParts, setAllParts] = useState([]);
@@ -20,29 +22,54 @@ const PartDetails = ({ issueId, issueKey, onClose }) => {
     const [showQRPanel, setShowQRPanel] = useState(false);
     const [isMobileMode, setIsMobileMode] = useState(false);
 
+    // CONSOLIDATED: Sync props to state AND fetch data (prevents race condition)
     useEffect(() => {
-        if (!currentPartId) return;
+        console.log('[PartDetails useEffect] Triggered with issueId:', issueId, 'issueKey:', issueKey);
 
-        setLoading(true);
-        // Seed demo data first, then fetch history and all parts
-        invoke('seedDemoData', { issueId: currentPartId })
-            .then(() => Promise.all([
-                // Fix: Pass 'query' as the key/id for the resolver to find the part
-                invoke('getHistory', { query: currentPartKey || currentPartId }),
-                invoke('getAllParts')
-            ]))
-            .then(([historyData, partsData]) => {
-                // Fix: Extract history array if wrapped in an object
+        // Update local state
+        setCurrentPartId(issueId);
+        setCurrentPartKey(issueKey);
+
+        const fetchData = async () => {
+            // Use props directly to avoid stale state
+            const partId = issueId;
+            const partKey = issueKey;
+
+            console.log('[PartDetails fetchData] Using partId:', partId, 'partKey:', partKey);
+
+            // Guard against undefined values
+            if (!partId && !partKey) {
+                console.warn('[PartDetails] No part ID or key provided - both are undefined!');
+                console.warn('[PartDetails] Props at guard check:', { issueId, issueKey });
+                setLoading(false);
+                return;
+            }
+
+            setLoading(true);
+            try {
+                const query = partKey || partId;
+                console.log('[PartDetails] Calling getHistory with query:', query);
+
+                const [historyData, partsData] = await Promise.all([
+                    invoke('getHistory', { key: 'getHistory', query }),
+                    invoke('getAllParts', { key: 'getAllParts' })
+                ]);
+
+                console.log('[PartDetails] Received historyData:', historyData);
+                console.log('[PartDetails] historyData FULL:', JSON.stringify(historyData, null, 2));
                 const historyArray = historyData.history || (Array.isArray(historyData) ? historyData : []);
+                console.log('[PartDetails] Extracted historyArray:', historyArray);
                 setHistory(historyArray);
-                setAllParts(partsData);
+                setAllParts(Array.isArray(partsData) ? partsData : []);
                 setLoading(false);
-            })
-            .catch(error => {
-                console.error('Error loading telemetry:', error);
+            } catch (error) {
+                console.error('[PartDetails] Error loading telemetry:', error);
                 setLoading(false);
-            });
-    }, [currentPartId]);
+            }
+        };
+
+        fetchData();
+    }, [issueId, issueKey]);
 
     const handlePartChange = (partId, partKey) => {
         setCurrentPartId(partId);
@@ -52,12 +79,13 @@ const PartDetails = ({ issueId, issueKey, onClose }) => {
     const handleLogEvent = async ({ status, note }) => {
         try {
             await invoke('logEvent', {
+                key: 'logEvent',
                 issueId,
                 status,
                 note
             });
             // Fix: Re-fetch history after logging with correct payload
-            const updatedHistoryData = await invoke('getHistory', { query: currentPartKey || currentPartId });
+            const updatedHistoryData = await invoke('getHistory', { key: 'getHistory', query: currentPartKey || currentPartId });
             const historyArray = updatedHistoryData.history || (Array.isArray(updatedHistoryData) ? updatedHistoryData : []);
             setHistory(historyArray);
         } catch (error) {
@@ -68,7 +96,7 @@ const PartDetails = ({ issueId, issueKey, onClose }) => {
 
     const handleMobileEventLogged = async () => {
         try {
-            const updatedHistoryData = await invoke('getHistory', { query: currentPartKey || currentPartId });
+            const updatedHistoryData = await invoke('getHistory', { key: 'getHistory', query: currentPartKey || currentPartId });
             const historyArray = updatedHistoryData.history || (Array.isArray(updatedHistoryData) ? updatedHistoryData : []);
             setHistory(historyArray);
         } catch (error) {
@@ -109,7 +137,7 @@ const PartDetails = ({ issueId, issueKey, onClose }) => {
                         <img src={logo} alt="Williams Racing" style={styles.logo} />
                         <div>
                             <h1 className="gradient-text" style={styles.title}>
-                                🏁 PitLane Ledger
+                                PitLane Ledger
                             </h1>
                             <p style={styles.subtitle}>
                                 Williams Parts Passport • {currentPartKey || currentPartId}
@@ -147,8 +175,8 @@ const PartDetails = ({ issueId, issueKey, onClose }) => {
                                     .filter(p => !['RETIRED', 'SCRAPPED'].includes(p.pitlaneStatus))
                                     .filter(p =>
                                         !searchQuery ||
-                                        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                                        p.key.toLowerCase().includes(searchQuery.toLowerCase())
+                                        p.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                        p.key?.toLowerCase().includes(searchQuery.toLowerCase())
                                     )
                                     .map(part => (
                                         <option
@@ -194,8 +222,8 @@ const PartDetails = ({ issueId, issueKey, onClose }) => {
                 <div style={styles.statDivider} />
                 <div style={styles.statItem}>
                     <div style={styles.statValue}>
-                        {history?.[0]?.timestamp
-                            ? Math.floor((Date.now() - new Date(history[0].timestamp).getTime()) / (1000 * 60 * 60 * 24))
+                        {history?.[history.length - 1]?.timestamp
+                            ? Math.floor((Date.now() - new Date(history[history.length - 1].timestamp).getTime()) / (1000 * 60 * 60 * 24))
                             : 0}d
                     </div>
                     <div style={styles.statLabel}>Age</div>
@@ -203,7 +231,7 @@ const PartDetails = ({ issueId, issueKey, onClose }) => {
                 <div style={styles.statDivider} />
                 <div style={styles.statItem}>
                     <div style={styles.statValue}>
-                        {history?.[history.length - 1]?.status.split(' ')[0] || '—'}
+                        {history?.[history.length - 1]?.status?.split(' ')[0] || '—'}
                     </div>
                     <div style={styles.statLabel}>Status</div>
                 </div>

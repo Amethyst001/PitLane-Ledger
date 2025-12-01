@@ -34,14 +34,20 @@ const Dashboard = () => {
             const [allParts, calendar, drivers, isFirstLoad] = await Promise.all([
                 invoke('getAllParts', { key: 'getAllParts' }),
                 invoke('getRaceCalendar', { key: 'getRaceCalendar' }),
-                invoke('getDriverNames'),
-                invoke('checkInitialLoad', { issueId: null })
+                invoke('getDriverNames', { key: 'getDriverNames' }),
+                invoke('checkInitialLoad', { key: 'checkInitialLoad', issueId: null })
             ]);
 
-
-
             setParts(Array.isArray(allParts) ? allParts : []);
-            setRaceCalendar(calendar);
+
+            // Fallback for calendar if fetch fails or returns empty
+            const defaultCalendar = [
+                { name: 'Bahrain GP', date: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] },
+                { name: 'Saudi Arabian GP', date: new Date(Date.now() + 97 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] },
+                { name: 'Australian GP', date: new Date(Date.now() + 111 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] }
+            ];
+
+            setRaceCalendar(Array.isArray(calendar) && calendar.length > 0 ? calendar : defaultCalendar);
             if (drivers) setDriverNames(drivers);
             if (isFirstLoad) setShowOnboarding(true);
 
@@ -77,9 +83,9 @@ const Dashboard = () => {
     };
 
     const filteredParts = (Array.isArray(parts) ? parts : []).filter(part => {
-        const matchesSearch = part.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            part.key.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesVisual = visualFilter ? part.name.toLowerCase().includes(visualFilter.toLowerCase()) : true;
+        const matchesSearch = part.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            part.key?.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchesVisual = visualFilter ? part.name?.toLowerCase().includes(visualFilter.toLowerCase()) : true;
         return matchesSearch && matchesVisual;
     }).sort((a, b) => {
         // 1. Sort RETIRED/SCRAPPED to the bottom
@@ -218,9 +224,9 @@ const Dashboard = () => {
                                                     {isRetired ? (
                                                         <span style={{ color: 'var(--color-text-muted)' }}>-</span>
                                                     ) : part.assignment ? (
-                                                        <span style={getAssignmentStyle(part.assignment)} title={part.assignment && part.assignment.includes('Car 1') ? driverNames.car1 : part.assignment && part.assignment.includes('Car 2') ? driverNames.car2 : 'Shared Pool'}>
-                                                            {part.assignment && part.assignment.includes('Car 1') ? `🔵 23 ${driverNames.car1.split(' ').pop()}` :
-                                                                part.assignment && part.assignment.includes('Car 2') ? `🟡 55 ${driverNames.car2.split(' ').pop()}` :
+                                                        <span style={getAssignmentStyle(part.assignment)} title={part.assignment && part.assignment.includes('Car 1') ? driverNames?.car1 : part.assignment && part.assignment.includes('Car 2') ? driverNames?.car2 : 'Shared Pool'}>
+                                                            {part.assignment && part.assignment.includes('Car 1') ? `🔵 23 ${driverNames?.car1?.split(' ').pop() || 'Albon'}` :
+                                                                part.assignment && part.assignment.includes('Car 2') ? `🟡 55 ${driverNames?.car2?.split(' ').pop() || 'Sainz'}` :
                                                                     '⚪ Spares'}
                                                         </span>
                                                     ) : (
@@ -334,7 +340,9 @@ const Dashboard = () => {
                             <button style={styles.closeButton} onClick={() => setSelectedPart(null)}>
                                 <X size={24} />
                             </button>
+                            {console.log('[Dashboard] Rendering PartDetails with:', { id: selectedPart.id, key: selectedPart.key, name: selectedPart.name })}
                             <PartDetails
+                                key={selectedPart.id}
                                 issueId={selectedPart.id}
                                 issueKey={selectedPart.key}
                             />

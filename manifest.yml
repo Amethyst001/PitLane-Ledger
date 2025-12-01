@@ -609,6 +609,8 @@ modules:
 resources:
   - key: main
     path: dist
+    tunnel:
+      port: 5173
 
 permissions:
   scopes:

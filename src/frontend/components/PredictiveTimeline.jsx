@@ -4,7 +4,7 @@ import { AlertTriangle, Calendar, Wrench } from 'lucide-react';
 const PredictiveTimeline = ({ parts, calendar = [], onOpenSettings }) => {
     // Process calendar data: calculate daysAway if missing, and sort
     const upcomingRaces = React.useMemo(() => {
-        if (!calendar || calendar.length === 0) return [];
+        if (!Array.isArray(calendar) || calendar.length === 0) return [];
 
         return calendar.map(race => {
             if (race.daysAway !== undefined) return race;
@@ -113,7 +113,7 @@ const PredictiveTimeline = ({ parts, calendar = [], onOpenSettings }) => {
                                 {idx === 0 && criticalParts.length > 0 && (
                                     <div style={styles.raceMaintenance}>
                                         <Wrench size={12} />
-                                        <span>Replace: {criticalParts.map(p => p.name.split(' ')[0]).join(', ')}</span>
+                                        <span>Replace: {criticalParts.map(p => p.name?.split(' ')[0] || 'Unknown').join(', ')}</span>
                                     </div>
                                 )}
                             </div>

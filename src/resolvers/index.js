@@ -97,6 +97,8 @@ function uuid() {
 export const handler = async (event, context) => {
   console.log("🚀 [DEBUG] RAW HANDLER INVOKED");
   console.log("🚀 [DEBUG] Event Keys:", Object.keys(event));
+  console.log("🚀 [DEBUG] event.call type:", typeof event.call);
+  console.log("🚀 [DEBUG] event.call:", JSON.stringify(event.call));
 
 
   // 1. ROBUST KEY EXTRACTION
@@ -114,6 +116,8 @@ export const handler = async (event, context) => {
   // Fallbacks
   if (!functionKey && typeof event.call === 'string') functionKey = event.call;
   if (!functionKey && typeof event === 'string') functionKey = event;
+
+  console.log("🚀 [DEBUG] Extracted functionKey:", functionKey);
 
 
 
@@ -169,17 +173,22 @@ export const handler = async (event, context) => {
       return parts;
     }
 
-    if (functionKey === 'rovoGetHistory' || functionKey === 'get-history') {
-      const query = event.query || (event.payload && event.payload.query);
+    if (functionKey === 'rovoGetHistory' || functionKey === 'get-history' || functionKey === 'getHistory') {
+      // Extract query from event structure - Forge bridge puts it in event.call.payload.query
+      const query = event.query ||
+        (event.payload && event.payload.query) ||
+        (event.call && event.call.payload && event.call.payload.query);
+
+      console.log('[Resolver getHistory] Extracted query:', query);
       const parts = getMockParts();
       const part = parts.find(p => p.key === query || p.name === query);
       if (!part) return { error: `Part '${query}' not found.` };
       return {
         part: part,
         history: [
-          { date: new Date().toISOString(), action: 'INSPECTION', details: 'Routine check passed', user: 'Chief Mechanic' },
-          { date: new Date(Date.now() - 86400000).toISOString(), action: 'INSTALL', details: `Fitted to ${part.assignment}`, user: 'Mechanic A' },
-          { date: new Date(Date.now() - 7 * 86400000).toISOString(), action: 'RECEIVE', details: 'Arrived at track', user: 'Logistics Mgr' }
+          { id: uuid(), timestamp: new Date().toISOString(), status: '🔍 INSPECTION', note: 'Routine check passed - Chief Mechanic' },
+          { id: uuid(), timestamp: new Date(Date.now() - 86400000).toISOString(), status: `🔧 INSTALL`, note: `Fitted to ${part.assignment} - Mechanic A` },
+          { id: uuid(), timestamp: new Date(Date.now() - 7 * 86400000).toISOString(), status: '📦 RECEIVE', note: 'Arrived at track - Logistics Mgr' }
         ]
       };
     }
@@ -235,8 +244,14 @@ export const handler = async (event, context) => {
 
     // --- PHASE 2 & 3: DOMAIN LOGIC & WRITES ---
 
-    if (functionKey === 'rovoLogPartEvent' || functionKey === 'log-part-event') {
+    if (functionKey === 'rovoLogPartEvent' || functionKey === 'log-part-event' || functionKey === 'logEvent') {
+      console.log('[Resolver] Logging event:', event);
       return { status: 'SUCCESS', message: 'Event logged successfully.', eventId: uuid() };
+    }
+
+    if (functionKey === 'addPart') {
+      console.log('[Resolver] Adding part:', event.part || event.payload?.part);
+      return { status: 'SUCCESS', message: 'Part added to inventory.', partId: uuid() };
     }
 
     if (functionKey === 'rovoUpdatePartStatus' || functionKey === 'update-part-status') {

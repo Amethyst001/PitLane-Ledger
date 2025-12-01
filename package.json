@@ -6,6 +6,7 @@
   "license": "MIT",
   "scripts": {
     "build": "vite build",
+    "dev": "vite",
     "deploy": "npm run build && forge deploy",
     "tunnel": "npm run build && forge tunnel"
   },

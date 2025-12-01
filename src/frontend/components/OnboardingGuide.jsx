@@ -44,6 +44,7 @@ const OnboardingGuide = ({ onBack }) => {
             const reader = new FileReader();
             reader.onload = (e) => {
                 const content = e.target.result;
+                if (!content) return;
                 const lines = content.split('\n');
                 const headers = lines[0].toLowerCase();
 

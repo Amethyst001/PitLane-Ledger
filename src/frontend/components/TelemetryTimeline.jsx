@@ -7,6 +7,7 @@ import { Factory, Wrench, CheckCircle, Package, Plane, Flag, AlertTriangle, Truc
  * Icon mapping for different event statuses
  */
 const getIconForStatus = (status) => {
+    if (!status) return 'var(--color-text-secondary)';
     const statusLower = status.toLowerCase();
 
     if (statusLower.includes('manufactured') || statusLower.includes('forged')) {
@@ -35,6 +36,7 @@ const getIconForStatus = (status) => {
 };
 
 const getColorForStatus = (status) => {
+    if (!status) return '#00B8D9';
     const statusLower = status.toLowerCase();
 
     if (statusLower.includes('damaged') || statusLower.includes('failed') || statusLower.includes('critical')) {
@@ -51,7 +53,7 @@ const getColorForStatus = (status) => {
 };
 
 const TelemetryTimeline = ({ history }) => {
-    if (!history || history.length === 0) {
+    if (!Array.isArray(history) || history.length === 0) {
         return (
             <div style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--color-text-muted)' }}>
                 No telemetry data available
@@ -121,7 +123,7 @@ const TelemetryTimeline = ({ history }) => {
                             paddingTop: 'var(--spacing-sm)',
                             borderTop: '1px solid var(--color-border-subtle)'
                         }}>
-                            ID: {event.id.substring(0, 8)}...
+                            ID: {event.id?.substring(0, 8) || 'Unknown'}...
                         </div>
                     </VerticalTimelineElement>
                 );
