@@ -27,11 +27,14 @@ const PartDetails = ({ issueId, issueKey, onClose }) => {
         // Seed demo data first, then fetch history and all parts
         invoke('seedDemoData', { issueId: currentPartId })
             .then(() => Promise.all([
-                invoke('getHistory', { issueId: currentPartId }),
+                // Fix: Pass 'query' as the key/id for the resolver to find the part
+                invoke('getHistory', { query: currentPartKey || currentPartId }),
                 invoke('getAllParts')
             ]))
             .then(([historyData, partsData]) => {
-                setHistory(historyData);
+                // Fix: Extract history array if wrapped in an object
+                const historyArray = historyData.history || (Array.isArray(historyData) ? historyData : []);
+                setHistory(historyArray);
                 setAllParts(partsData);
                 setLoading(false);
             })
@@ -48,12 +51,15 @@ const PartDetails = ({ issueId, issueKey, onClose }) => {
 
     const handleLogEvent = async ({ status, note }) => {
         try {
-            const updatedHistory = await invoke('logEvent', {
+            await invoke('logEvent', {
                 issueId,
                 status,
                 note
             });
-            setHistory(updatedHistory);
+            // Fix: Re-fetch history after logging with correct payload
+            const updatedHistoryData = await invoke('getHistory', { query: currentPartKey || currentPartId });
+            const historyArray = updatedHistoryData.history || (Array.isArray(updatedHistoryData) ? updatedHistoryData : []);
+            setHistory(historyArray);
         } catch (error) {
             console.error('Error logging event:', error);
             throw error;
@@ -62,8 +68,9 @@ const PartDetails = ({ issueId, issueKey, onClose }) => {
 
     const handleMobileEventLogged = async () => {
         try {
-            const updatedHistory = await invoke('getHistory', { issueId });
-            setHistory(updatedHistory);
+            const updatedHistoryData = await invoke('getHistory', { query: currentPartKey || currentPartId });
+            const historyArray = updatedHistoryData.history || (Array.isArray(updatedHistoryData) ? updatedHistoryData : []);
+            setHistory(historyArray);
         } catch (error) {
             console.error('Error refreshing history:', error);
         }

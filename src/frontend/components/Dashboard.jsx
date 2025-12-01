@@ -348,6 +348,7 @@ const Dashboard = () => {
                     <RaceCalendarSettings
                         onClose={() => setShowCalendarSettings(false)}
                         onSave={(newCalendar) => setRaceCalendar(newCalendar)}
+                        initialRaces={raceCalendar}
                     />
                 )
             }

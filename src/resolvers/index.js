@@ -185,10 +185,12 @@ export const handler = async (event, context) => {
     }
 
     if (functionKey === 'rovoGetRaceCalendar' || functionKey === 'get-race-calendar' || functionKey === 'getRaceCalendar') {
+      const now = new Date();
+      const year = now.getFullYear() + 1; // Next year
       return [
-        { round: 1, race: 'Bahrain GP', date: '2025-03-02', location: 'Sakhir', weather: 'Clear, 28°C' },
-        { round: 2, race: 'Saudi Arabian GP', date: '2025-03-09', location: 'Jeddah', weather: 'Night, 26°C' },
-        { round: 3, race: 'Australian GP', date: '2025-03-23', location: 'Melbourne', weather: 'Partly Cloudy, 22°C' }
+        { round: 1, name: 'Bahrain GP', date: `${year}-03-02`, location: 'Sakhir', weather: 'Clear, 28°C' },
+        { round: 2, name: 'Saudi Arabian GP', date: `${year}-03-09`, location: 'Jeddah', weather: 'Night, 26°C' },
+        { round: 3, name: 'Australian GP', date: `${year}-03-23`, location: 'Melbourne', weather: 'Partly Cloudy, 22°C' }
       ];
     }
 

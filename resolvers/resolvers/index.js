@@ -169,207 +169,180 @@ export const handler = async (event, context) => {
       return parts;
     }
 
-    if (functionKey === 'rovoGetHistory' || functionKey === 'get-history') {
-      const query = event.query || (event.payload && event.payload.query);
-      const parts = getMockParts();
-      const part = parts.find(p => p.key === query || p.name === query);
-      if (!part) return { error: `Part '${query}' not found.` };
-      return {
-        part: part,
-        history: [
-          { date: new Date().toISOString(), action: 'INSPECTION', details: 'Routine check passed', user: 'Chief Mechanic' },
-          { date: new Date(Date.now() - 86400000).toISOString(), action: 'INSTALL', details: `Fitted to ${part.assignment}`, user: 'Mechanic A' },
-          { date: new Date(Date.now() - 7 * 86400000).toISOString(), action: 'RECEIVE', details: 'Arrived at track', user: 'Logistics Mgr' }
-        ]
-      };
-    }
+    reserve: { driver: 'Franco Colapinto' }
+  };
+}
 
-    if (functionKey === 'rovoGetRaceCalendar' || functionKey === 'get-race-calendar' || functionKey === 'getRaceCalendar') {
-      return [
-        { round: 1, race: 'Bahrain GP', date: '2025-03-02', location: 'Sakhir', weather: 'Clear, 28°C' },
-        { round: 2, race: 'Saudi Arabian GP', date: '2025-03-09', location: 'Jeddah', weather: 'Night, 26°C' },
-        { round: 3, race: 'Australian GP', date: '2025-03-23', location: 'Melbourne', weather: 'Partly Cloudy, 22°C' }
-      ];
-    }
+// --- PHASE 1: ENHANCED TOOLING ---
 
-    if (functionKey === 'rovoGetDriverAssignments' || functionKey === 'get-driver-assignments') {
-      return {
-        car1: { driver: 'Alex Albon', chassis: 'FW46-01', engine: 'Mercedes M15 E' },
-        car2: { driver: 'Carlos Sainz', chassis: 'FW46-02', engine: 'Mercedes M15 E' },
-        reserve: { driver: 'Franco Colapinto' }
-      };
-    }
+if (functionKey === 'rovoGetWeatherForecast' || functionKey === 'get-weather-forecast') {
+  return { location: 'Sakhir', condition: 'Clear', temp: 28, wind: '15 km/h NW', rainChance: '0%' };
+}
 
-    // --- PHASE 1: ENHANCED TOOLING ---
+if (functionKey === 'rovoSearchKnowledgeBase' || functionKey === 'search-knowledge-base') {
+  const query = event.query || (event.payload && event.payload.query);
+  return { results: [`Found 3 docs for "${query}": 1. FW47 Setup Guide, 2. Aero Balance Sheet, 3. Tyre Degradation Report`] };
+}
 
-    if (functionKey === 'rovoGetWeatherForecast' || functionKey === 'get-weather-forecast') {
-      return { location: 'Sakhir', condition: 'Clear', temp: 28, wind: '15 km/h NW', rainChance: '0%' };
-    }
+if (functionKey === 'rovoCheckCompatibility' || functionKey === 'check-compatibility') {
+  return { compatible: true, notes: 'Part matches FW46 spec. No modifications needed.' };
+}
 
-    if (functionKey === 'rovoSearchKnowledgeBase' || functionKey === 'search-knowledge-base') {
-      const query = event.query || (event.payload && event.payload.query);
-      return { results: [`Found 3 docs for "${query}": 1. FW47 Setup Guide, 2. Aero Balance Sheet, 3. Tyre Degradation Report`] };
-    }
+if (functionKey === 'rovoCalculateLifespan' || functionKey === 'calculate-lifespan') {
+  return { remainingLife: '85%', estimatedLaps: 450, status: 'HEALTHY' };
+}
 
-    if (functionKey === 'rovoCheckCompatibility' || functionKey === 'check-compatibility') {
-      return { compatible: true, notes: 'Part matches FW46 spec. No modifications needed.' };
-    }
+if (functionKey === 'rovoFindDuplicates' || functionKey === 'find-duplicates') {
+  return { duplicates: [], message: 'No duplicate part keys found in inventory.' };
+}
 
-    if (functionKey === 'rovoCalculateLifespan' || functionKey === 'calculate-lifespan') {
-      return { remainingLife: '85%', estimatedLaps: 450, status: 'HEALTHY' };
-    }
+if (functionKey === 'rovoGetCriticalAlerts' || functionKey === 'get-critical-alerts') {
+  return getMockParts().filter(p => p.pitlaneStatus.includes('DAMAGED') || p.life < 20);
+}
 
-    if (functionKey === 'rovoFindDuplicates' || functionKey === 'find-duplicates') {
-      return { duplicates: [], message: 'No duplicate part keys found in inventory.' };
-    }
+if (functionKey === 'rovoCompareParts' || functionKey === 'compare-parts') {
+  return { message: 'Comparison generated. Part A has 15% more wear than Part B.' };
+}
 
-    if (functionKey === 'rovoGetCriticalAlerts' || functionKey === 'get-critical-alerts') {
-      return getMockParts().filter(p => p.pitlaneStatus.includes('DAMAGED') || p.life < 20);
-    }
+// --- PHASE 2 & 3: DOMAIN LOGIC & WRITES ---
 
-    if (functionKey === 'rovoCompareParts' || functionKey === 'compare-parts') {
-      return { message: 'Comparison generated. Part A has 15% more wear than Part B.' };
-    }
+if (functionKey === 'rovoLogPartEvent' || functionKey === 'log-part-event') {
+  return { status: 'SUCCESS', message: 'Event logged successfully.', eventId: uuid() };
+}
 
-    // --- PHASE 2 & 3: DOMAIN LOGIC & WRITES ---
+if (functionKey === 'rovoUpdatePartStatus' || functionKey === 'update-part-status') {
+  return { status: 'SUCCESS', message: `Part status updated to ${event.status || 'requested status'}.` };
+}
 
-    if (functionKey === 'rovoLogPartEvent' || functionKey === 'log-part-event') {
-      return { status: 'SUCCESS', message: 'Event logged successfully.', eventId: uuid() };
-    }
+if (functionKey === 'rovoGenerateHandoverReport' || functionKey === 'generate-handover-report') {
+  return { report: 'Shift Handover: All cars prepped. PIT-104 requires inspection. 3 parts in transit.' };
+}
 
-    if (functionKey === 'rovoUpdatePartStatus' || functionKey === 'update-part-status') {
-      return { status: 'SUCCESS', message: `Part status updated to ${event.status || 'requested status'}.` };
-    }
+if (functionKey === 'rovoGetRaceWeekendContext' || functionKey === 'get-race-weekend-context') {
+  return { session: 'FP2', nextSession: 'FP3', timeToSession: '14 hours', focus: 'Qualifying Sims' };
+}
 
-    if (functionKey === 'rovoGenerateHandoverReport' || functionKey === 'generate-handover-report') {
-      return { report: 'Shift Handover: All cars prepped. PIT-104 requires inspection. 3 parts in transit.' };
-    }
+if (functionKey === 'rovoGetPartHierarchy' || functionKey === 'get-part-hierarchy') {
+  return { parent: 'Front Wing Assembly', children: ['Mainplane', 'Endplate L', 'Endplate R', 'Flaps'] };
+}
 
-    if (functionKey === 'rovoGetRaceWeekendContext' || functionKey === 'get-race-weekend-context') {
-      return { session: 'FP2', nextSession: 'FP3', timeToSession: '14 hours', focus: 'Qualifying Sims' };
-    }
+if (functionKey === 'rovoEstimateShipping' || functionKey === 'estimate-shipping') {
+  return { eta: '24 hours', provider: 'DHL', status: 'In Customs' };
+}
 
-    if (functionKey === 'rovoGetPartHierarchy' || functionKey === 'get-part-hierarchy') {
-      return { parent: 'Front Wing Assembly', children: ['Mainplane', 'Endplate L', 'Endplate R', 'Flaps'] };
-    }
+if (functionKey === 'rovoCheckCompliance' || functionKey === 'check-compliance') {
+  return { compliant: true, regulation: 'FIA Art 3.4.1', notes: 'Dimensions within tolerance.' };
+}
 
-    if (functionKey === 'rovoEstimateShipping' || functionKey === 'estimate-shipping') {
-      return { eta: '24 hours', provider: 'DHL', status: 'In Customs' };
-    }
+if (functionKey === 'rovoAnalyzeCost' || functionKey === 'analyze-cost') {
+  return { cost: '$45,000', budgetImpact: 'Low', replacementTime: '3 days' };
+}
 
-    if (functionKey === 'rovoCheckCompliance' || functionKey === 'check-compliance') {
-      return { compliant: true, regulation: 'FIA Art 3.4.1', notes: 'Dimensions within tolerance.' };
-    }
+if (functionKey === 'rovoGetDriverPreference' || functionKey === 'get-driver-preference') {
+  return { driver: 'Albon', preference: 'Prefers sharp front end, tolerates oversteer.' };
+}
 
-    if (functionKey === 'rovoAnalyzeCost' || functionKey === 'analyze-cost') {
-      return { cost: '$45,000', budgetImpact: 'Low', replacementTime: '3 days' };
-    }
+if (functionKey === 'rovoGetHelp' || functionKey === 'get-help') {
+  return { message: 'I can help with Inventory, History, Compliance, Logistics, and Race Strategy. Just ask!' };
+}
 
-    if (functionKey === 'rovoGetDriverPreference' || functionKey === 'get-driver-preference') {
-      return { driver: 'Albon', preference: 'Prefers sharp front end, tolerates oversteer.' };
-    }
+if (functionKey === 'rovoGenerateLink' || functionKey === 'generate-link') {
+  return { url: 'https://pitlaneledger.atlassian.net/browse/PIT-101' };
+}
 
-    if (functionKey === 'rovoGetHelp' || functionKey === 'get-help') {
-      return { message: 'I can help with Inventory, History, Compliance, Logistics, and Race Strategy. Just ask!' };
-    }
+if (functionKey === 'rovoBulkStatusCheck' || functionKey === 'bulk-status-check') {
+  return { matched: 5, status: 'All 5 parts are TRACKSIDE.' };
+}
 
-    if (functionKey === 'rovoGenerateLink' || functionKey === 'generate-link') {
-      return { url: 'https://pitlaneledger.atlassian.net/browse/PIT-101' };
-    }
+if (functionKey === 'rovoSubmitFeedback' || functionKey === 'submit-feedback') {
+  return { status: 'RECEIVED', message: 'Thank you for your feedback. It has been logged for the dev team.' };
+}
 
-    if (functionKey === 'rovoBulkStatusCheck' || functionKey === 'bulk-status-check') {
-      return { matched: 5, status: 'All 5 parts are TRACKSIDE.' };
-    }
+// --- PHASE 5: OPS & ANALYTICS ---
 
-    if (functionKey === 'rovoSubmitFeedback' || functionKey === 'submit-feedback') {
-      return { status: 'RECEIVED', message: 'Thank you for your feedback. It has been logged for the dev team.' };
-    }
+if (functionKey === 'rovoPredictFailure' || functionKey === 'predict-failure') {
+  return { probability: '12%', riskLevel: 'LOW', recommendation: 'Continue monitoring.' };
+}
 
-    // --- PHASE 5: OPS & ANALYTICS ---
+if (functionKey === 'rovoOptimizeStock' || functionKey === 'optimize-stock') {
+  return { recommendation: 'Order 2x Front Wing Endplates. Stock low.' };
+}
 
-    if (functionKey === 'rovoPredictFailure' || functionKey === 'predict-failure') {
-      return { probability: '12%', riskLevel: 'LOW', recommendation: 'Continue monitoring.' };
-    }
+if (functionKey === 'rovoSimulateRace' || functionKey === 'simulate-race') {
+  return { result: 'Simulation Complete. Predicted tyre wear: Medium. Fuel load: Optimal.' };
+}
 
-    if (functionKey === 'rovoOptimizeStock' || functionKey === 'optimize-stock') {
-      return { recommendation: 'Order 2x Front Wing Endplates. Stock low.' };
-    }
+if (functionKey === 'rovoAssignTask' || functionKey === 'assign-task') {
+  return { status: 'CREATED', taskId: 'TASK-999', assignee: event.assignee || 'Team Member' };
+}
 
-    if (functionKey === 'rovoSimulateRace' || functionKey === 'simulate-race') {
-      return { result: 'Simulation Complete. Predicted tyre wear: Medium. Fuel load: Optimal.' };
-    }
+if (functionKey === 'rovoGetTeamStatus' || functionKey === 'get-team-status') {
+  return { onShift: ['Mechanic A', 'Mechanic B', 'Engineer C'], fatigue: 'Low' };
+}
 
-    if (functionKey === 'rovoAssignTask' || functionKey === 'assign-task') {
-      return { status: 'CREATED', taskId: 'TASK-999', assignee: event.assignee || 'Team Member' };
-    }
+if (functionKey === 'rovoAuditLog' || functionKey === 'audit-log') {
+  return { logs: ['User X updated status', 'User Y checked history'] };
+}
 
-    if (functionKey === 'rovoGetTeamStatus' || functionKey === 'get-team-status') {
-      return { onShift: ['Mechanic A', 'Mechanic B', 'Engineer C'], fatigue: 'Low' };
-    }
+if (functionKey === 'rovoDebugAgent' || functionKey === 'debug-agent') {
+  return { version: '1.0.0', environment: 'Production', uptime: '99.9%' };
+}
 
-    if (functionKey === 'rovoAuditLog' || functionKey === 'audit-log') {
-      return { logs: ['User X updated status', 'User Y checked history'] };
-    }
+// --- PHASE 7: ADVANCED WORKFLOWS ---
 
-    if (functionKey === 'rovoDebugAgent' || functionKey === 'debug-agent') {
-      return { version: '1.0.0', environment: 'Production', uptime: '99.9%' };
-    }
+if (functionKey === 'rovoCheckPreflightCompliance' || functionKey === 'check-preflight-compliance') {
+  return { status: 'PASSED', checks: ['Weight', 'Dimensions', 'Material'], inspector: 'FIA Delegate' };
+}
 
-    // --- PHASE 7: ADVANCED WORKFLOWS ---
+if (functionKey === 'rovoGenerateShiftBriefing' || functionKey === 'generate-shift-briefing') {
+  return { briefing: 'Morning Briefing: Focus on suspension setup for FP3. Check PIT-104 damage.' };
+}
 
-    if (functionKey === 'rovoCheckPreflightCompliance' || functionKey === 'check-preflight-compliance') {
-      return { status: 'PASSED', checks: ['Weight', 'Dimensions', 'Material'], inspector: 'FIA Delegate' };
-    }
+if (functionKey === 'rovoDetectGhostParts' || functionKey === 'detect-ghost-parts') {
+  return { ghosts: [], message: 'No ghost parts detected.' };
+}
 
-    if (functionKey === 'rovoGenerateShiftBriefing' || functionKey === 'generate-shift-briefing') {
-      return { briefing: 'Morning Briefing: Focus on suspension setup for FP3. Check PIT-104 damage.' };
-    }
+if (functionKey === 'rovoTriageDamage' || functionKey === 'triage-damage') {
+  return { severity: 'STRUCTURAL', action: 'Replace immediately. Do not repair.' };
+}
 
-    if (functionKey === 'rovoDetectGhostParts' || functionKey === 'detect-ghost-parts') {
-      return { ghosts: [], message: 'No ghost parts detected.' };
-    }
+if (functionKey === 'rovoCheckCannibalization' || functionKey === 'check-cannibalization') {
+  return { allowed: true, source: 'Car 2', target: 'Car 1', notes: 'Compatible. Ensure log is updated.' };
+}
 
-    if (functionKey === 'rovoTriageDamage' || functionKey === 'triage-damage') {
-      return { severity: 'STRUCTURAL', action: 'Replace immediately. Do not repair.' };
-    }
+if (functionKey === 'rovoRecommendRestock' || functionKey === 'recommend-restock') {
+  return { items: ['Wheel Nuts', 'Brake Ducts'], urgency: 'MEDIUM' };
+}
 
-    if (functionKey === 'rovoCheckCannibalization' || functionKey === 'check-cannibalization') {
-      return { allowed: true, source: 'Car 2', target: 'Car 1', notes: 'Compatible. Ensure log is updated.' };
-    }
+if (functionKey === 'rovoGetTechSpecs' || functionKey === 'get-tech-specs') {
+  return { torque: '45Nm', material: 'Titanium Grade 5', weight: '1.2kg' };
+}
 
-    if (functionKey === 'rovoRecommendRestock' || functionKey === 'recommend-restock') {
-      return { items: ['Wheel Nuts', 'Brake Ducts'], urgency: 'MEDIUM' };
-    }
+if (functionKey === 'rovoAnalyzeRootCause' || functionKey === 'analyze-root-cause') {
+  return { cause: 'Vibration fatigue', confidence: '85%', similarIncidents: 2 };
+}
 
-    if (functionKey === 'rovoGetTechSpecs' || functionKey === 'get-tech-specs') {
-      return { torque: '45Nm', material: 'Titanium Grade 5', weight: '1.2kg' };
-    }
+if (functionKey === 'rovoLogCarbonFootprint' || functionKey === 'log-carbon-footprint') {
+  return { emissions: '12kg CO2', offset: 'Purchased' };
+}
 
-    if (functionKey === 'rovoAnalyzeRootCause' || functionKey === 'analyze-root-cause') {
-      return { cause: 'Vibration fatigue', confidence: '85%', similarIncidents: 2 };
-    }
+if (functionKey === 'rovoGenerateAutopsyReport' || functionKey === 'generate-autopsy-report') {
+  return { report: 'Component failed at lap 45. Thermal stress exceeded limits.' };
+}
 
-    if (functionKey === 'rovoLogCarbonFootprint' || functionKey === 'log-carbon-footprint') {
-      return { emissions: '12kg CO2', offset: 'Purchased' };
-    }
-
-    if (functionKey === 'rovoGenerateAutopsyReport' || functionKey === 'generate-autopsy-report') {
-      return { report: 'Component failed at lap 45. Thermal stress exceeded limits.' };
-    }
-
-    // --- FALLBACK / UNKNOWN ---
-    return {
-      status: "DEBUG_MODE",
-      message: `Function '${functionKey}' not implemented yet.`,
-      debug_event_keys: Object.keys(event),
-      debug_context_keys: Object.keys(context || {})
-    };
+// --- FALLBACK / UNKNOWN ---
+return {
+  status: "DEBUG_MODE",
+  message: `Function '${functionKey}' not implemented yet.`,
+  debug_event_keys: Object.keys(event),
+  debug_context_keys: Object.keys(context || {})
+};
 
   } catch (err) {
-    console.error("❌ [ERROR] Handler execution failed:", err);
-    return {
-      error: "Internal Handler Error",
-      message: err.message
-    };
-  }
+  console.error("❌ [ERROR] Handler execution failed:", err);
+  return {
+    error: "Internal Handler Error",
+    message: err.message
+  };
+}
 };

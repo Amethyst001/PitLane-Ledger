@@ -1,18 +1,36 @@
 import React from 'react';
 import { AlertTriangle, Calendar, Wrench } from 'lucide-react';
 
-const PredictiveTimeline = ({ parts, onOpenSettings }) => {
-    const upcomingRaces = [
-        { name: 'Bahrain GP', date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000), daysAway: 3 },
-        { name: 'Saudi Arabian GP', date: new Date(Date.now() + 10 * 24 * 60 * 60 * 1000), daysAway: 10 },
-        { name: 'Australian GP', date: new Date(Date.now() + 17 * 24 * 60 * 60 * 1000), daysAway: 17 },
-    ];
+const PredictiveTimeline = ({ parts, calendar = [], onOpenSettings }) => {
+    // Process calendar data: calculate daysAway if missing, and sort
+    const upcomingRaces = React.useMemo(() => {
+        if (!calendar || calendar.length === 0) return [];
+
+        return calendar.map(race => {
+            if (race.daysAway !== undefined) return race;
+
+            const date = new Date(race.date);
+            const today = new Date();
+            today.setHours(0, 0, 0, 0);
+            date.setHours(0, 0, 0, 0);
+            const daysAway = Math.ceil((date - today) / (1000 * 60 * 60 * 24));
+            return { ...race, daysAway };
+        })
+            .filter(r => r.daysAway >= 0)
+            .sort((a, b) => a.daysAway - b.daysAway);
+    }, [calendar]);
 
     const criticalParts = parts.filter(p => p.predictiveStatus === 'CRITICAL' && p.lifeRemaining <= 1);
     const warningParts = parts.filter(p => p.predictiveStatus === 'WARNING' || p.lifeRemaining === 2);
 
     const nextRaceReadiness = parts.filter(p => p.pitlaneStatus.includes('Trackside')).length;
     const inTransit = parts.filter(p => p.pitlaneStatus.includes('Transit')).length;
+
+    const [visibleRaces, setVisibleRaces] = React.useState(3);
+
+    const toggleShowMore = () => {
+        setVisibleRaces(prev => prev === 3 ? upcomingRaces.length : 3);
+    };
 
     return (
         <div style={styles.container}>
@@ -66,30 +84,61 @@ const PredictiveTimeline = ({ parts, onOpenSettings }) => {
                     <span>RACE CALENDAR</span>
                 </div>
 
-                {upcomingRaces.map((race, idx) => (
-                    <div key={idx} style={styles.raceItem}>
-                        <div style={styles.raceHeader}>
-                            <div style={styles.raceName}>{race.name}</div>
-                            <div style={styles.raceDays}>{race.daysAway}d</div>
-                        </div>
-                        <div style={styles.raceStatus}>
-                            <span style={{ color: nextRaceReadiness >= 8 ? '#00D084' : '#F59E0B' }}>
-                                {nextRaceReadiness} parts trackside
-                            </span>
-                            {inTransit > 0 && (
-                                <span style={{ color: '#F59E0B', marginLeft: '8px' }}>
-                                    • {inTransit} in transit
-                                </span>
-                            )}
-                        </div>
-                        {idx === 0 && criticalParts.length > 0 && (
-                            <div style={styles.raceMaintenance}>
-                                <Wrench size={12} />
-                                <span>Replace: {criticalParts.map(p => p.name.split(' ')[0]).join(', ')}</span>
+                {upcomingRaces.slice(0, visibleRaces).map((race, idx) => {
+                    const raceDate = new Date(race.date);
+                    const month = raceDate.toLocaleString('default', { month: 'short' }).toUpperCase();
+                    const day = raceDate.getDate().toString().padStart(2, '0');
+
+                    return (
+                        <div key={idx} style={styles.raceItem}>
+                            <div style={styles.dateBox}>
+                                <div style={styles.dateMonth}>{month}</div>
+                                <div style={styles.dateDay}>{day}</div>
                             </div>
-                        )}
+                            <div style={styles.raceContent}>
+                                <div style={styles.raceHeader}>
+                                    <div style={styles.raceName}>{race.name}</div>
+                                    <div style={styles.raceDays}>{race.daysAway}d</div>
+                                </div>
+                                <div style={styles.raceStatus}>
+                                    <span style={{ color: nextRaceReadiness >= 8 ? '#00D084' : '#F59E0B' }}>
+                                        {nextRaceReadiness} parts trackside
+                                    </span>
+                                    {inTransit > 0 && (
+                                        <span style={{ color: '#F59E0B', marginLeft: '8px' }}>
+                                            • {inTransit} in transit
+                                        </span>
+                                    )}
+                                </div>
+                                {idx === 0 && criticalParts.length > 0 && (
+                                    <div style={styles.raceMaintenance}>
+                                        <Wrench size={12} />
+                                        <span>Replace: {criticalParts.map(p => p.name.split(' ')[0]).join(', ')}</span>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    );
+                })}
+
+                {upcomingRaces.length > 3 && (
+                    <div style={{ padding: '12px 0', textAlign: 'center' }}>
+                        <button
+                            onClick={toggleShowMore}
+                            style={styles.showMoreBtn}
+                            onMouseEnter={(e) => {
+                                e.currentTarget.style.background = 'var(--color-accent-cyan)';
+                                e.currentTarget.style.color = '#0A0E1A';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.background = 'transparent';
+                                e.currentTarget.style.color = 'var(--color-accent-cyan)';
+                            }}
+                        >
+                            {visibleRaces === 3 ? 'Show More' : 'Show Less'}
+                        </button>
                     </div>
-                ))}
+                )}
             </div>
         </div>
     );
@@ -192,12 +241,41 @@ const styles = {
     raceItem: {
         padding: '12px 0',
         borderBottom: '1px solid rgba(255, 255, 255, 0.05)',
+        display: 'flex',
+        gap: '16px',
+        alignItems: 'flex-start'
+    },
+    dateBox: {
+        background: 'rgba(255, 255, 255, 0.05)',
+        borderRadius: '8px',
+        padding: '8px',
+        minWidth: '50px',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        border: '1px solid var(--color-border-subtle)'
+    },
+    dateMonth: {
+        fontSize: '10px',
+        fontWeight: 700,
+        color: 'var(--color-text-muted)',
+        textTransform: 'uppercase'
+    },
+    dateDay: {
+        fontSize: '18px',
+        fontWeight: 700,
+        color: 'var(--color-text-primary)',
+        lineHeight: 1.2
+    },
+    raceContent: {
+        flex: 1
     },
     raceHeader: {
         display: 'flex',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: '6px',
+        marginBottom: '4px',
     },
     raceName: {
         fontSize: '14px',
@@ -205,17 +283,16 @@ const styles = {
         color: 'var(--color-text-primary)',
     },
     raceDays: {
-        fontSize: '12px',
+        fontSize: '11px',
         fontWeight: 700,
         color: '#00D9FF',
         background: 'rgba(0, 217, 255, 0.1)',
-        padding: '2px 8px',
+        padding: '2px 6px',
         borderRadius: '4px',
     },
     raceStatus: {
         fontSize: '12px',
         color: 'var(--color-text-secondary)',
-        marginBottom: '4px',
     },
     raceMaintenance: {
         display: 'flex',
@@ -227,6 +304,17 @@ const styles = {
         padding: '4px 8px',
         borderRadius: '4px',
         marginTop: '6px',
+    },
+    showMoreBtn: {
+        background: 'transparent',
+        border: '1px solid var(--color-accent-cyan)',
+        color: 'var(--color-accent-cyan)',
+        padding: '8px 24px',
+        borderRadius: '6px',
+        cursor: 'pointer',
+        fontSize: '12px',
+        fontWeight: 600,
+        transition: 'all 0.2s'
     },
 };
 

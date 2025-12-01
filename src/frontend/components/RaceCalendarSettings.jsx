@@ -2,11 +2,11 @@ import React, { useState } from 'react';
 import { invoke } from '@forge/bridge';
 import { Save, X, Plus, Trash2, Calendar } from 'lucide-react';
 
-const RaceCalendarSettings = ({ onClose, onSave }) => {
-    const [races, setRaces] = useState([
-        { name: 'Bahrain GP', date: '2025-02-28' },
-        { name: 'Saudi Arabian GP', date: '2025-03-08' },
-        { name: 'Australian GP', date: '2025-03-22' }
+const RaceCalendarSettings = ({ onClose, onSave, initialRaces }) => {
+    const [races, setRaces] = useState(initialRaces && initialRaces.length > 0 ? initialRaces : [
+        { name: 'Bahrain GP', date: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] }, // ~3 months out
+        { name: 'Saudi Arabian GP', date: new Date(Date.now() + 97 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] },
+        { name: 'Australian GP', date: new Date(Date.now() + 111 * 24 * 60 * 60 * 1000).toISOString().split('T')[0] }
     ]);
     const [error, setError] = useState(null);
     const [saving, setSaving] = useState(false);
@@ -31,9 +31,14 @@ const RaceCalendarSettings = ({ onClose, onSave }) => {
         setSaving(true);
         setError(null);
         try {
-            // Validate
-            const validRaces = races.filter(r => r.name && r.date);
-            if (validRaces.length === 0) throw new Error("At least one valid race is required");
+            // Validate: Check for incomplete entries
+            const incompleteRace = races.find(r => !r.name.trim() || !r.date);
+            if (incompleteRace) {
+                throw new Error("All races must have both a name and a date.");
+            }
+
+            const validRaces = races;
+            if (validRaces.length === 0) throw new Error("At least one race is required");
 
             // Calculate daysAway for each
             const processed = validRaces.map(r => {
@@ -158,7 +163,7 @@ const styles = {
     },
     footer: {
         padding: '20px', borderTop: '1px solid var(--color-border-subtle)',
-        display: 'flex', justifyContent: 'flex-end', gap: '12px', background: 'rgba(0,0,0,0.2)'
+        display: 'flex', justifyContent: 'space-between', gap: '12px', background: 'rgba(0,0,0,0.2)'
     },
     error: {
         color: '#EF4444', fontSize: '13px', marginTop: '10px', padding: '10px',
