@@ -30,20 +30,24 @@ const Dashboard = () => {
     const fetchData = async () => {
         setLoading(true);
         try {
+            console.log("🚀 [DASHBOARD] Fetching data...");
             const [allParts, calendar, drivers, isFirstLoad] = await Promise.all([
-                invoke('getAllParts'),
-                invoke('getRaceCalendar'),
+                invoke('getAllParts', { key: 'getAllParts' }),
+                invoke('getRaceCalendar', { key: 'getRaceCalendar' }),
                 invoke('getDriverNames'),
                 invoke('checkInitialLoad', { issueId: null })
             ]);
 
-            setParts(allParts);
+            console.log("🚀 [DASHBOARD] getAllParts response:", allParts);
+
+            setParts(Array.isArray(allParts) ? allParts : []);
             setRaceCalendar(calendar);
             if (drivers) setDriverNames(drivers);
             if (isFirstLoad) setShowOnboarding(true);
 
             // Filter out retired parts for stats
-            const activeParts = allParts.filter(p => !['RETIRED', 'SCRAPPED'].includes(p.pitlaneStatus));
+            const safeParts = Array.isArray(allParts) ? allParts : [];
+            const activeParts = safeParts.filter(p => !['RETIRED', 'SCRAPPED'].includes(p.pitlaneStatus));
 
             const newStats = {
                 total: activeParts.length,
@@ -72,10 +76,10 @@ const Dashboard = () => {
         }
     };
 
-    const filteredParts = parts.filter(part => {
+    const filteredParts = (Array.isArray(parts) ? parts : []).filter(part => {
         const matchesSearch = part.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
             part.key.toLowerCase().includes(searchQuery.toLowerCase());
-        const matchesVisual = visualFilter ? part.name.includes(visualFilter) : true;
+        const matchesVisual = visualFilter ? part.name.toLowerCase().includes(visualFilter.toLowerCase()) : true;
         return matchesSearch && matchesVisual;
     }).sort((a, b) => {
         // Sort RETIRED/SCRAPPED to the bottom
@@ -97,7 +101,7 @@ const Dashboard = () => {
     };
 
     // Only calculate weight for active parts
-    const activeParts = parts.filter(p => !['RETIRED', 'SCRAPPED'].includes(p.pitlaneStatus));
+    const activeParts = (Array.isArray(parts) ? parts : []).filter(p => !['RETIRED', 'SCRAPPED'].includes(p.pitlaneStatus));
     const totalWeight = activeParts.reduce((sum, p) => sum + getPartWeight(p.name), 0);
     const tracksideWeight = activeParts.filter(p => p.pitlaneStatus.includes('Trackside')).reduce((sum, p) => sum + getPartWeight(p.name), 0);
     const weightedReadiness = totalWeight > 0 ? Math.round((tracksideWeight / totalWeight) * 100) : readinessScore;
@@ -120,7 +124,7 @@ const Dashboard = () => {
                     <div style={styles.readinessBadge}>
                         <div style={styles.readinessLabel}>FLEET READINESS</div>
                         <div style={styles.readinessValue}>{weightedReadiness}%</div>
-                    </div>
+                    </div >
                     <svg width="60" height="30" style={{ marginLeft: '16px' }}>
                         <path d="M0,25 Q15,5 30,15 T60,5" fill="none" stroke="#00D084" strokeWidth="3" />
                     </svg>
@@ -146,8 +150,8 @@ const Dashboard = () => {
                         <RotateCcw size={14} />
                         Reset Onboarding
                     </button>
-                </div>
-            </header>
+                </div >
+            </header >
 
             <div style={styles.grid}>
                 <StatCard title="Total Inventory" value={stats.total} icon={<Package size={20} />} color="#00A0E3" sub={`Synced: ${lastSynced.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`} />
@@ -307,27 +311,31 @@ const Dashboard = () => {
                 </div>
             </div>
 
-            {selectedPart && (
-                <div style={styles.drawerOverlay} onClick={() => setSelectedPart(null)}>
-                    <div style={styles.drawer} onClick={e => e.stopPropagation()}>
-                        <button style={styles.closeButton} onClick={() => setSelectedPart(null)}>
-                            <X size={24} />
-                        </button>
-                        <PartDetails
-                            issueId={selectedPart.id}
-                            issueKey={selectedPart.key}
-                        />
+            {
+                selectedPart && (
+                    <div style={styles.drawerOverlay} onClick={() => setSelectedPart(null)}>
+                        <div style={styles.drawer} onClick={e => e.stopPropagation()}>
+                            <button style={styles.closeButton} onClick={() => setSelectedPart(null)}>
+                                <X size={24} />
+                            </button>
+                            <PartDetails
+                                issueId={selectedPart.id}
+                                issueKey={selectedPart.key}
+                            />
+                        </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
-            {showCalendarSettings && (
-                <RaceCalendarSettings
-                    onClose={() => setShowCalendarSettings(false)}
-                    onSave={(newCalendar) => setRaceCalendar(newCalendar)}
-                />
-            )}
-        </div>
+            {
+                showCalendarSettings && (
+                    <RaceCalendarSettings
+                        onClose={() => setShowCalendarSettings(false)}
+                        onSave={(newCalendar) => setRaceCalendar(newCalendar)}
+                    />
+                )
+            }
+        </div >
     );
 };
 

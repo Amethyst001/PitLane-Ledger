@@ -81,57 +81,270 @@ const OnboardingGuide = ({ onBack }) => {
             setCopiedStep(index);
             setTimeout(() => setCopiedStep(null), 2000);
         } else if (step.actionType === 'generate') {
-            // Generate bulk QR View
-            // Open window immediately to bypass popup blockers
-            const printWindow = window.open('', '_blank');
-
-            if (printWindow) {
-                printWindow.document.write('<html><body style="font-family: sans-serif; padding: 20px; text-align: center;"><h1>Loading Inventory Data...</h1><p>Please wait while we fetch the latest QR codes.</p></body></html>');
-
-                try {
-                    const allParts = await invoke('getAllParts');
-                    printWindow.document.open();
-                    printWindow.document.write(`
-                        <html>
-                        <head>
-                            <title>PitLane Ledger - Bulk QR Codes</title>
-                            <style>
-                                body { font-family: sans-serif; padding: 20px; }
-                                .qr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 20px; }
-                                .qr-item { border: 1px solid #ccc; padding: 10px; text-align: center; page-break-inside: avoid; }
-                                .qr-code { width: 100px; height: 100px; background: #eee; margin: 0 auto 10px; display: flex; align-items: center; justify-content: center; }
-                                .part-key { font-weight: bold; font-size: 14px; }
-                                .part-name { font-size: 12px; color: #666; }
-                                @media print {
-                                    .no-print { display: none; }
-                                }
-                            </style>
-                        </head>
-                        <body>
-                            <h1>PitLane Ledger - Inventory Tags</h1>
-                            <button class="no-print" onclick="window.print()" style="padding: 10px 20px; margin-bottom: 20px; cursor: pointer;">Print Labels</button>
-                            <div class="qr-grid">
-                                ${allParts.map(part => `
-                                    <div class="qr-item">
-                                        <div class="qr-code">
-                                            <!-- Placeholder for actual QR generation -->
-                                            <img src="https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${part.key}" alt="${part.key}" />
-                                        </div>
-                                        <div class="part-key">${part.key}</div>
-                                        <div class="part-name">${part.name}</div>
-                                    </div>
-                                `).join('')}
-                            </div>
-                        </body>
-                        </html>
-                    `);
-                    printWindow.document.close();
-                } catch (error) {
-                    console.error('Failed to generate QR view:', error);
-                    printWindow.document.body.innerHTML = '<h1>Error</h1><p>Failed to load parts for printing. Please try again.</p>';
+            // Generate bulk QR View - Download as HTML file to avoid popup blockers
+            try {
+                const allParts = await invoke('getAllParts', { key: 'getAllParts' });
+                if (!Array.isArray(allParts)) {
+                    throw new Error('Invalid parts data received');
                 }
-            } else {
-                alert('Please allow popups to view the printable QR codes.');
+
+                const htmlContent = `
+<!DOCTYPE html>
+<html>
+<head>
+    <title>PitLane Ledger - Inventory QR Codes</title>
+    <meta charset="UTF-8">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        
+        body { 
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', sans-serif;
+            background: linear-gradient(135deg, #0a0e1a 0%, #1a1f35 100%);
+            color: #fff;
+            padding: 40px 20px;
+        }
+        
+        .header {
+            text-align: center;
+            margin-bottom: 40px;
+            padding-bottom: 30px;
+            border-bottom: 2px solid rgba(0, 184, 217, 0.3);
+        }
+        
+        .logo-area {
+            margin-bottom: 20px;
+        }
+        
+        .logo-text {
+            font-size: 48px;
+            font-weight: 700;
+            background: linear-gradient(90deg, #00B8D9, #00A0E3);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+        
+        .header h1 {
+            font-size: 32px;
+            margin: 10px 0;
+            color: #fff;
+        }
+        
+        .header p {
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 16px;
+        }
+        
+        .controls {
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        
+        .btn-print {
+            background: linear-gradient(135deg, #00B8D9, #0066cc);
+            border: none;
+            color: white;
+            padding: 15px 40px;
+            font-size: 16px;
+            font-weight: 600;
+            border-radius: 8px;
+            cursor: pointer;
+            box-shadow: 0 4px 15px rgba(0, 184, 217, 0.3);
+            transition: transform 0.2s;
+        }
+        
+        .btn-print:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(0, 184, 217, 0.4);
+        }
+        
+        .stats {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+            background: rgba(0, 184, 217, 0.1);
+            border-radius: 12px;
+            border: 1px solid rgba(0, 184, 217, 0.2);
+        }
+        
+        .stats-number {
+            font-size: 48px;
+            font-weight: 700;
+            color: #00B8D9;
+        }
+        
+        .stats-label {
+            font-size: 14px;
+            color: rgba(255, 255, 255, 0.6);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .qr-grid { 
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+            gap: 24px;
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+        
+        .qr-item { 
+            background: rgba(21, 27, 46, 0.8);
+            border: 2px solid rgba(0, 184, 217, 0.2);
+            padding: 20px;
+            text-align: center;
+            border-radius: 12px;
+            page-break-inside: avoid;
+            transition: all 0.3s;
+        }
+        
+        .qr-item:hover {
+            border-color: rgba(0, 184, 217, 0.5);
+            transform: translateY(-4px);
+            box-shadow: 0 8px 20px rgba(0, 184, 217, 0.2);
+        }
+        
+        .qr-code { 
+            width: 120px;
+            height: 120px;
+            background: #fff;
+            margin: 0 auto 15px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 8px;
+            padding: 8px;
+            position: relative;
+        }
+        
+        .qr-code img {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .qr-logo {
+            display: none; /* No logo overlay */
+        }
+        
+        .part-key { 
+            font-weight: 700;
+            font-size: 16px;
+            color: #00B8D9;
+            margin-bottom: 6px;
+        }
+        
+        .part-name { 
+            font-size: 13px;
+            color: rgba(255, 255, 255, 0.7);
+            line-height: 1.4;
+        }
+        
+        @media print {
+            body {
+                background: white;
+                color: black;
+                padding: 20px;
+            }
+            
+            .no-print { display: none; }
+            
+            .header {
+                border-bottom-color: #ddd;
+            }
+            
+            .logo-text {
+                -webkit-text-fill-color: #00B8D9;
+                color: #00B8D9;
+            }
+            
+            .header h1, .header p {
+                color: black;
+            }
+            
+            .stats {
+                background: #f5f5f5;
+                border-color: #ddd;
+            }
+            
+            .stats-number {
+                color: #00B8D9;
+            }
+            
+            .stats-label {
+                color: #666;
+            }
+            
+            .qr-item {
+                background: white;
+                border-color: #ddd;
+            }
+            
+            .qr-item:hover {
+                transform: none;
+                box-shadow: none;
+            }
+            
+            .part-key {
+                color: #0066cc;
+            }
+            
+            .part-name {
+                color: #666;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="logo-area">
+            <div class="logo-text">PitLane Ledger</div>
+        </div>
+        <h1>Inventory QR Codes</h1>
+        <p>Scan any code to view part details on mobile</p>
+    </div>
+    
+    <div class="controls no-print">
+        <button class="btn-print" onclick="window.print()">Print All Labels</button>
+    </div>
+    
+    <div class="stats no-print">
+        <div class="stats-number">${allParts.length}</div>
+        <div class="stats-label">Total Parts</div>
+    </div>
+    
+    <div class="qr-grid">
+        ${allParts.map(part => `
+            <div class="qr-item">
+                <div class="qr-code">
+                    <img src="https://api.qrserver.com/v1/create-qr-code/?size=120x120&data=${encodeURIComponent('https://pitlaneledger.atlassian.net/browse/' + part.key)}" alt="${part.key}" />
+                </div>
+                <div class="part-key">${part.key}</div>
+                <div class="part-name">${part.name}</div>
+            </div>
+        `).join('')}
+    </div>
+</body>
+</html>`;
+                // Create blob and download
+                const blob = new Blob([htmlContent], { type: 'text/html' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `pitlane-qr-codes-${new Date().toISOString().slice(0, 10)}.html`;
+                document.body.appendChild(a);
+                a.click();
+
+                // Cleanup
+                setTimeout(() => {
+                    document.body.removeChild(a);
+                    window.URL.revokeObjectURL(url);
+                }, 100);
+
+                setCopiedStep(index);
+                setTimeout(() => setCopiedStep(null), 3000);
+            } catch (error) {
+                console.error('Failed to generate QR view:', error);
+                alert('Failed to generate QR codes. Please try again.');
             }
         } else if (step.actionType === 'saveDrivers') {
             invoke('setDriverNames', driverNames).then(() => {
@@ -198,19 +411,41 @@ const OnboardingGuide = ({ onBack }) => {
                                         </div>
                                     </div>
                                 ) : null}
-                                <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+                                <div style={{ display: 'flex', gap: '12px' }}>
                                     <button
-                                        className="step-action-btn"
                                         onClick={() => handleAction(step, index)}
+                                        style={{
+                                            flex: 1,
+                                            padding: '12px 20px',
+                                            background: 'linear-gradient(135deg, var(--color-accent-cyan), var(--color-accent-blue))',
+                                            border: 'none',
+                                            borderRadius: '8px',
+                                            color: 'white',
+                                            fontWeight: 600,
+                                            cursor: 'pointer',
+                                            fontSize: '14px',
+                                            transition: 'transform 0.2s'
+                                        }}
+                                        onMouseEnter={(e) => e.currentTarget.style.transform = 'translateY(-2px)'}
+                                        onMouseLeave={(e) => e.currentTarget.style.transform = 'translateY(0)'}
                                     >
-                                        {step.actionType === 'saveDrivers' ? (savedDrivers ? 'Saved!' : 'Save Driver Names') :
-                                            copiedStep === index ? (step.actionType === 'download' ? 'Downloaded!' : 'Copied!') : step.action}
+                                        {copiedStep === index || (step.actionType === 'saveDrivers' && savedDrivers) ? '✓ Done' : step.action}
                                     </button>
                                     {step.action2 && (
                                         <button
-                                            className="step-action-btn"
-                                            style={{ background: 'transparent', border: '1px solid var(--color-accent-cyan)' }}
                                             onClick={() => handleSecondaryAction(step, index)}
+                                            style={{
+                                                flex: 1,
+                                                padding: '12px 20px',
+                                                background: 'rgba(255, 255, 255, 0.1)',
+                                                border: '1px solid var(--color-border-subtle)',
+                                                borderRadius: '8px',
+                                                color: 'var(--color-text-primary)',
+                                                fontWeight: 600,
+                                                cursor: 'pointer',
+                                                fontSize: '14px',
+                                                transition: 'all 0.2s'
+                                            }}
                                         >
                                             {step.action2}
                                         </button>
