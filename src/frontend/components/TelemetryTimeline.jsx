@@ -1,7 +1,7 @@
 import React from 'react';
 import { VerticalTimeline, VerticalTimelineElement } from 'react-vertical-timeline-component';
 import 'react-vertical-timeline-component/style.min.css';
-import { Factory, Wrench, CheckCircle, Package, Plane, Flag, AlertTriangle, Truck, ClipboardCheck } from 'lucide-react';
+import { Factory, Wrench, CheckCircle, Package, Plane, Flag, AlertTriangle, Truck, ClipboardCheck, Archive, AlertCircle } from 'lucide-react';
 
 /**
  * Icon mapping for different event statuses
@@ -28,8 +28,14 @@ const getIconForStatus = (status) => {
     if (statusLower.includes('trackside') || statusLower.includes('arrived')) {
         return <Flag size={20} />;
     }
-    if (statusLower.includes('damaged') || statusLower.includes('failed') || statusLower.includes('alert') || statusLower.includes('wear') || statusLower.includes('warning')) {
+    if (statusLower.includes('end of life') || statusLower.includes('retired') || statusLower.includes('scrapped')) {
+        return <Archive size={20} />;
+    }
+    if (statusLower.includes('damaged') || statusLower.includes('failed') || statusLower.includes('critical')) {
         return <AlertTriangle size={20} />;
+    }
+    if (statusLower.includes('alert') || statusLower.includes('wear') || statusLower.includes('warning')) {
+        return <AlertCircle size={20} />;
     }
     if (statusLower.includes('assigned') || statusLower.includes('install') || statusLower.includes('fitted') || statusLower.includes('service')) {
         return <Wrench size={20} />;
@@ -46,16 +52,19 @@ const getColorForStatus = (status) => {
     const statusLower = status.toLowerCase();
 
     if (statusLower.includes('damaged') || statusLower.includes('failed') || statusLower.includes('critical')) {
-        return '#F04438';
+        return '#F04438'; // Red
     }
-    if (statusLower.includes('quality') || statusLower.includes('passed') || statusLower.includes('trackside')) {
-        return '#00D084';
+    if (statusLower.includes('end of life') || statusLower.includes('retired') || statusLower.includes('scrapped') || statusLower.includes('wear') || statusLower.includes('warning')) {
+        return '#F79009'; // Orange
+    }
+    if (statusLower.includes('quality') || statusLower.includes('passed') || statusLower.includes('trackside') || statusLower.includes('inspection') || statusLower.includes('certified')) {
+        return '#00D084'; // Green
     }
     if (statusLower.includes('transit') || statusLower.includes('shipped')) {
-        return '#00A0DE';
+        return '#00A0DE'; // Blue
     }
 
-    return '#00B8D9';
+    return '#00B8D9'; // Cyan (Default)
 };
 
 const TelemetryTimeline = ({ history }) => {

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { invoke, view } from '@forge/bridge';
-import { Search, Activity, AlertTriangle, CheckCircle, Package, Truck, RefreshCw, X, Clock, ArrowRight, Settings, RotateCcw } from 'lucide-react';
+import { Search, Activity, AlertTriangle, CheckCircle, Package, Truck, RefreshCw, X, Clock, ArrowRight, Settings, RotateCcw, Flag, Factory, Plane } from 'lucide-react';
 import PartDetails from './PartDetails';
 import CarConfigurator from './CarConfigurator';
 import PredictiveTimeline from './PredictiveTimeline';
@@ -13,6 +13,7 @@ const Dashboard = () => {
     const [stats, setStats] = useState({ total: 0, trackside: 0, inTransit: 0, critical: 0 });
     const [loading, setLoading] = useState(true);
     const [searchQuery, setSearchQuery] = useState('');
+    const [statusFilter, setStatusFilter] = useState('ALL');
     const [visualFilter, setVisualFilter] = useState(null);
     const [selectedPart, setSelectedPart] = useState(null);
     const [driverNames, setDriverNames] = useState({ car1: 'Alex Albon', car2: 'Carlos Sainz' });
@@ -86,15 +87,30 @@ const Dashboard = () => {
         const matchesSearch = part.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
             part.key?.toLowerCase().includes(searchQuery.toLowerCase());
         const matchesVisual = visualFilter ? part.name?.toLowerCase().includes(visualFilter.toLowerCase()) : true;
-        return matchesSearch && matchesVisual;
-    }).sort((a, b) => {
-        // 1. Sort RETIRED/SCRAPPED to the bottom
-        const isARetired = ['RETIRED', 'SCRAPPED'].includes(a.pitlaneStatus);
-        const isBRetired = ['RETIRED', 'SCRAPPED'].includes(b.pitlaneStatus);
-        if (isARetired && !isBRetired) return 1;
-        if (!isARetired && isBRetired) return -1;
 
-        // 2. Sort by Assignment (Car 1 -> Car 2 -> Spares -> Others)
+        let matchesStatus = true;
+        if (statusFilter === 'TRACKSIDE') matchesStatus = part.pitlaneStatus.includes('Trackside');
+        if (statusFilter === 'TRANSIT') matchesStatus = part.pitlaneStatus.includes('In Transit');
+        if (statusFilter === 'CRITICAL') matchesStatus = part.pitlaneStatus.includes('DAMAGED') || part.predictiveStatus === 'CRITICAL';
+        if (statusFilter === 'MANUFACTURED') matchesStatus = part.pitlaneStatus.includes('Manufactured');
+
+        return matchesSearch && matchesVisual && matchesStatus;
+    }).sort((a, b) => {
+        // 0. Smart Sort: Critical > Trackside > Transit > Manufactured > Others > Retired
+        const getStatusPriority = (p) => {
+            if (['RETIRED', 'SCRAPPED'].includes(p.pitlaneStatus)) return 5;
+            if (p.pitlaneStatus.includes('DAMAGED') || p.predictiveStatus === 'CRITICAL') return 0;
+            if (p.pitlaneStatus.includes('Trackside')) return 1;
+            if (p.pitlaneStatus.includes('In Transit')) return 2;
+            if (p.pitlaneStatus.includes('Manufactured')) return 3;
+            return 4;
+        };
+
+        const priorityA = getStatusPriority(a);
+        const priorityB = getStatusPriority(b);
+        if (priorityA !== priorityB) return priorityA - priorityB;
+
+        // 1. Sort by Assignment (Car 1 -> Car 2 -> Spares -> Others)
         const getAssignmentPriority = (assignment) => {
             if (!assignment) return 4;
             if (assignment.includes('Car 1')) return 1;
@@ -103,12 +119,12 @@ const Dashboard = () => {
             return 4;
         };
 
-        const priorityA = getAssignmentPriority(a.assignment);
-        const priorityB = getAssignmentPriority(b.assignment);
+        const assignmentA = getAssignmentPriority(a.assignment);
+        const assignmentB = getAssignmentPriority(b.assignment);
 
-        if (priorityA !== priorityB) return priorityA - priorityB;
+        if (assignmentA !== assignmentB) return assignmentA - assignmentB;
 
-        // 3. Alphabetical by Name
+        // 2. Alphabetical by Name
         return a.name.localeCompare(b.name);
     });
 
@@ -188,7 +204,38 @@ const Dashboard = () => {
 
                     <div style={styles.panel}>
                         <div style={styles.panelHeader}>
-                            <h3 style={styles.panelTitle}>Active Inventory</h3>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                                <h3 style={styles.panelTitle}>Active Inventory</h3>
+                                <div style={{ display: 'flex', gap: '4px' }}>
+                                    {[
+                                        { id: 'ALL', icon: <Package size={14} />, color: '#6B7280' },
+                                        { id: 'TRACKSIDE', icon: <Flag size={14} />, color: '#00D084' },
+                                        { id: 'TRANSIT', icon: <Plane size={14} />, color: '#00A0DE' },
+                                        { id: 'CRITICAL', icon: <AlertTriangle size={14} />, color: '#F04438' },
+                                        { id: 'MANUFACTURED', icon: <Factory size={14} />, color: '#9CA3AF' }
+                                    ].map(filter => (
+                                        <button
+                                            key={filter.id}
+                                            onClick={() => setStatusFilter(filter.id)}
+                                            style={{
+                                                background: statusFilter === filter.id ? filter.color : 'rgba(255,255,255,0.05)',
+                                                border: `1px solid ${statusFilter === filter.id ? filter.color : 'rgba(255,255,255,0.1)'}`,
+                                                borderRadius: '4px',
+                                                padding: '4px 8px',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                color: statusFilter === filter.id ? '#000' : '#888',
+                                                transition: 'all 0.2s'
+                                            }}
+                                            title={filter.id}
+                                        >
+                                            {filter.icon}
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
                             <div style={styles.searchContainer}>
                                 <Search size={16} style={{ marginRight: '8px', color: '#888' }} />
                                 <input
@@ -241,7 +288,7 @@ const Dashboard = () => {
                                                 </td>
                                                 <td style={styles.td}>
                                                     {part.predictiveStatus === 'CRITICAL' && !isRetired ? (
-                                                        <span style={{ color: '#F04438', fontWeight: 'bold' }}>⚠️ End of Life</span>
+                                                        <span style={{ color: '#F04438', fontWeight: 'bold' }}>EOL</span>
                                                     ) : (
                                                         <span style={{ color: isRetired ? 'var(--color-text-muted)' : '#00D084' }}>
                                                             {isRetired ? '-' : `${part.lifeRemaining} Races`}

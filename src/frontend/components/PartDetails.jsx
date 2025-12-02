@@ -122,18 +122,91 @@ const PartDetails = ({ issueId, issueKey, onClose }) => {
         }
     };
 
-    if (loading) {
-        return (
-            <div style={styles.container}>
-                <div style={styles.loadingContainer}>
-                    <div className="shimmer" style={{ width: '100%', height: '80px', marginBottom: '16px' }} />
-                    <div className="shimmer" style={{ width: '100%', height: '80px', marginBottom: '16px' }} />
-                    <div className="shimmer" style={{ width: '100%', height: '80px' }} />
-                    <div style={styles.loadingText}>🏎️ Loading Telemetry...</div>
+    // Render Header ALWAYS
+    const renderHeader = () => (
+        <div style={styles.header}>
+            {/* Top Row: Logo, Title, Live Badge */}
+            <div style={styles.headerTop}>
+                <div style={styles.logoTitleGroup}>
+                    <img src={logo} alt="Williams Racing" style={styles.logo} />
+                    <div>
+                        <h1 className="gradient-text" style={styles.title}>
+                            PitLane Ledger
+                        </h1>
+                        <p style={styles.subtitle}>
+                            Williams Parts Passport • {currentPartKey || currentPartId}
+                        </p>
+                    </div>
+                </div>
+                <div style={styles.liveBadge}>
+                    <Radio size={14} className="pulse" style={{ color: 'var(--color-success)' }} />
+                    <span style={styles.liveBadgeText}>Live</span>
                 </div>
             </div>
-        );
-    }
+
+            {/* Bottom Row: Search, Selector, Actions */}
+            <div style={styles.headerBottom}>
+                {allParts.length > 0 && (
+                    <div style={styles.searchGroup}>
+                        <input
+                            type="text"
+                            placeholder="Search parts..."
+                            value={searchQuery}
+                            onChange={(e) => setSearchQuery(e.target.value)}
+                            style={styles.searchInput}
+                        />
+                        <select
+                            value={currentPartKey}
+                            onChange={(e) => {
+                                const selectedPart = allParts.find(p => p.key === e.target.value);
+                                if (selectedPart) {
+                                    handlePartChange(selectedPart.id, selectedPart.key);
+                                }
+                            }}
+                            style={styles.partSelector}
+                        >
+                            {allParts
+                                .filter(p => !['RETIRED', 'SCRAPPED'].includes(p.pitlaneStatus))
+                                .filter(p =>
+                                    !searchQuery ||
+                                    p.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                                    p.key?.toLowerCase().includes(searchQuery.toLowerCase())
+                                )
+                                .map(part => (
+                                    <option
+                                        key={part.id}
+                                        value={part.key}
+                                        style={{ background: '#0A0E1A', color: 'white' }}
+                                    >
+                                        {part.key} - {part.name}
+                                    </option>
+                                ))
+                            }
+                        </select>
+                    </div>
+                )}
+
+                <div style={styles.actionGroup}>
+                    <button onClick={() => setShowLogModal(true)} style={styles.actionButton} title="Log Event">
+                        <Plus size={16} />
+                        <span>Log Event</span>
+                    </button>
+
+                    <div style={styles.dividerVertical} />
+
+                    <div style={styles.iconGroup}>
+                        <button onClick={() => setShowQRPanel(true)} style={styles.actionButtonSecondary} title="QR Code">
+                            <QrCode size={16} />
+                        </button>
+
+                        <button onClick={() => setIsMobileMode(true)} style={styles.actionButtonSecondary} title="Pit Crew">
+                            <Smartphone size={16} />
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
 
     if (isMobileMode) {
         return (
@@ -147,118 +220,48 @@ const PartDetails = ({ issueId, issueKey, onClose }) => {
 
     return (
         <div style={styles.container}>
-            {/* Header - Mobile-First Redesign */}
-            <div style={styles.header}>
-                {/* Top Row: Logo, Title, Live Badge */}
-                <div style={styles.headerTop}>
-                    <div style={styles.logoTitleGroup}>
-                        <img src={logo} alt="Williams Racing" style={styles.logo} />
-                        <div>
-                            <h1 className="gradient-text" style={styles.title}>
-                                PitLane Ledger
-                            </h1>
-                            <p style={styles.subtitle}>
-                                Williams Parts Passport • {currentPartKey || currentPartId}
-                            </p>
+            {renderHeader()}
+
+            {loading ? (
+                <div style={styles.loadingContainer}>
+                    <div className="shimmer" style={{ width: '100%', height: '80px', marginBottom: '16px' }} />
+                    <div className="shimmer" style={{ width: '100%', height: '80px', marginBottom: '16px' }} />
+                    <div className="shimmer" style={{ width: '100%', height: '80px' }} />
+                    <div style={styles.loadingText}>🏎️ Loading Telemetry...</div>
+                </div>
+            ) : (
+                <>
+                    {/* Stats Bar */}
+                    <div style={styles.statsBar}>
+                        <div style={styles.statItem}>
+                            <div style={styles.statValue}>{history?.length || 0}</div>
+                            <div style={styles.statLabel}>Events</div>
+                        </div>
+                        <div style={styles.statDivider} />
+                        <div style={styles.statItem}>
+                            <div style={styles.statValue}>
+                                {history?.[history.length - 1]?.timestamp
+                                    ? Math.floor((Date.now() - new Date(history[history.length - 1].timestamp).getTime()) / (1000 * 60 * 60 * 24))
+                                    : 0}d
+                            </div>
+                            <div style={styles.statLabel}>Age</div>
+                        </div>
+                        <div style={styles.statDivider} />
+                        <div style={styles.statItem}>
+                            <div style={styles.statValue}>
+                                {history?.[0]?.status || '—'}
+                            </div>
+                            <div style={styles.statLabel}>Status</div>
                         </div>
                     </div>
-                    <div style={styles.liveBadge}>
-                        <Radio size={14} className="pulse" style={{ color: 'var(--color-success)' }} />
-                        <span style={styles.liveBadgeText}>Live</span>
+
+                    {/* Timeline */}
+                    <div style={styles.timelineContainer}>
+                        <TelemetryTimeline history={history} />
                     </div>
-                </div>
+                </>
+            )}
 
-                {/* Bottom Row: Search, Selector, Actions */}
-                <div style={styles.headerBottom}>
-                    {allParts.length > 0 && (
-                        <div style={styles.searchGroup}>
-                            <input
-                                type="text"
-                                placeholder="Search parts..."
-                                value={searchQuery}
-                                onChange={(e) => setSearchQuery(e.target.value)}
-                                style={styles.searchInput}
-                            />
-                            <select
-                                value={currentPartKey}
-                                onChange={(e) => {
-                                    const selectedPart = allParts.find(p => p.key === e.target.value);
-                                    if (selectedPart) {
-                                        handlePartChange(selectedPart.id, selectedPart.key);
-                                    }
-                                }}
-                                style={styles.partSelector}
-                            >
-                                {allParts
-                                    .filter(p => !['RETIRED', 'SCRAPPED'].includes(p.pitlaneStatus))
-                                    .filter(p =>
-                                        !searchQuery ||
-                                        p.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                                        p.key?.toLowerCase().includes(searchQuery.toLowerCase())
-                                    )
-                                    .map(part => (
-                                        <option
-                                            key={part.id}
-                                            value={part.key}
-                                            style={{ background: '#0A0E1A', color: 'white' }}
-                                        >
-                                            {part.key} - {part.name}
-                                        </option>
-                                    ))
-                                }
-                            </select>
-                        </div>
-                    )}
-
-                    <div style={styles.actionGroup}>
-                        <button onClick={() => setShowLogModal(true)} style={styles.actionButton} title="Log Event">
-                            <Plus size={16} />
-                            <span>Log Event</span>
-                        </button>
-
-                        <div style={styles.dividerVertical} />
-
-                        <div style={styles.iconGroup}>
-                            <button onClick={() => setShowQRPanel(true)} style={styles.actionButtonSecondary} title="QR Code">
-                                <QrCode size={16} />
-                            </button>
-
-                            <button onClick={() => setIsMobileMode(true)} style={styles.actionButtonSecondary} title="Pit Crew">
-                                <Smartphone size={16} />
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            </div>
-
-            {/* Stats Bar */}
-            <div style={styles.statsBar}>
-                <div style={styles.statItem}>
-                    <div style={styles.statValue}>{history?.length || 0}</div>
-                    <div style={styles.statLabel}>Events</div>
-                </div>
-                <div style={styles.statDivider} />
-                <div style={styles.statItem}>
-                    <div style={styles.statValue}>
-                        {history?.[history.length - 1]?.timestamp
-                            ? Math.floor((Date.now() - new Date(history[history.length - 1].timestamp).getTime()) / (1000 * 60 * 60 * 24))
-                            : 0}d
-                    </div>
-                    <div style={styles.statLabel}>Age</div>
-                </div>
-                <div style={styles.statDivider} />
-                <div style={styles.statItem}>
-                    <div style={styles.statValue}>
-                        {history?.[0]?.status?.split(' ')[0] || '—'}
-                    </div>
-                    <div style={styles.statLabel}>Status</div>
-                </div>
-            </div>
-
-            {/* Timeline */}
-            <div style={styles.timelineContainer}>
-                <TelemetryTimeline history={history} />
-            </div>
 
             {/* Modals */}
             <LogEventModal
@@ -274,7 +277,7 @@ const PartDetails = ({ issueId, issueKey, onClose }) => {
                 issueId={issueId}
                 issueKey={issueKey}
             />
-        </div>
+        </div >
     );
 };
 
