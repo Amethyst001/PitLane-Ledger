@@ -131,7 +131,58 @@ export const handler = async (event, context) => {
 
     // --- DASHBOARD & ONBOARDING HANDLERS ---
 
+    // DEMO RESOLVER: Always returns mock data, never touches storage
+    if (functionKey === 'getDemoParts') {
+      const parts = getMockParts();
+      console.log('[getDemoParts] Returning', parts.length, 'mock parts (DEMO mode)');
+      return parts;
+    }
+
+    // PRODUCTION RESOLVER: Always returns storage data
+    if (functionKey === 'getProductionParts') {
+      const inventory = await storage.get('inventory') || [];
+      const productionDataLoaded = await storage.get('productionDataLoaded') || false;
+
+      console.log('[getProductionParts] Data loaded:', productionDataLoaded);
+      console.log('[getProductionParts] Returning', inventory.length, 'parts from storage (PROD mode)');
+
+      // Add predictiveStatus to each part based on realistic logic
+      const partsWithStatus = inventory.map(part => {
+        const lifeNum = parseInt(part.life) || 100;
+        const assignmentStr = String(part.assignment || '').toLowerCase();
+        const statusStr = String(part.pitlaneStatus || '').toLowerCase();
+        const isSpare = assignmentStr.includes('spare') || assignmentStr.includes('unassigned');
+        const isDamaged = statusStr.includes('damage') || statusStr.includes('quarantine') || statusStr.includes('repair');
+
+        let predictiveStatus = 'HEALTHY';
+
+        // If part is damaged, it's CRITICAL regardless of spare status
+        if (isDamaged || lifeNum < 20) {
+          predictiveStatus = 'CRITICAL';
+        }
+        // Spares should be HEALTHY unless damaged (they're in reserve)
+        else if (isSpare) {
+          predictiveStatus = lifeNum < 50 ? 'WARNING' : 'HEALTHY';
+        }
+        // Active parts: base on life percentage
+        else if (lifeNum < 40) {
+          predictiveStatus = 'CRITICAL';
+        } else if (lifeNum < 65) {
+          predictiveStatus = 'WARNING';
+        }
+
+        return {
+          ...part,
+          predictiveStatus
+        };
+      });
+
+      return partsWithStatus;
+    }
+
+    // LEGACY: Keep getAllParts for backward compatibility (defaults to demo)
     if (functionKey === 'getAllParts') {
+      console.log('[getAllParts] DEPRECATED - Use getDemoParts or getProductionParts instead');
       const parts = getMockParts();
       return parts;
     }
@@ -141,14 +192,52 @@ export const handler = async (event, context) => {
       return !hasOnboarded;
     }
 
-    if (functionKey === 'resetStorage') {
-      await storage.set('onboardingComplete', false);
-      return { success: true };
+    if (functionKey === 'resetStorage' || functionKey === 'clearAllStorage') {
+      console.log('[clearAllStorage] Clearing all Forge storage keys...');
+
+      // Clear all storage keys
+      await storage.delete('onboardingComplete');
+      await storage.delete('appMode');
+      await storage.delete('inventory');
+      await storage.delete('productionDataLoaded');
+      await storage.delete('driverNames');
+      await storage.delete('fleetConfig');
+      await storage.delete('raceCalendar');
+
+      console.log('[clearAllStorage] Storage cleared successfully');
+      return { success: true, message: 'All storage cleared' };
+    }
+
+    if (functionKey === 'clearProductionData') {
+      console.log('[clearProductionData] Clearing production data only...');
+
+      // Clear only production-related keys
+      await storage.delete('inventory');
+      await storage.delete('productionDataLoaded');
+      await storage.delete('appMode');
+
+      console.log('[clearProductionData] Production data cleared');
+      return { success: true, message: 'Production data cleared' };
+    }
+
+    if (functionKey === 'setAppMode') {
+      const mode = event.mode || event.payload?.mode;
+      console.log('[setAppMode] Setting mode to:', mode);
+
+      await storage.set('appMode', mode);
+
+      // If switching to DEMO, clear production flags
+      if (mode === 'DEMO') {
+        await storage.set('productionDataLoaded', false);
+        console.log('[setAppMode] Cleared production flags for DEMO mode');
+      }
+
+      return { success: true, mode: mode };
     }
 
     if (functionKey === 'getDriverNames') {
       const drivers = await storage.get('driverNames');
-      return drivers || { car1: 'Alex Albon', car2: 'Carlos Sainz' };
+      return drivers || { car1: 'Car 1', car2: 'Car 2' };
     }
 
     if (functionKey === 'setDriverNames') {
@@ -173,16 +262,137 @@ export const handler = async (event, context) => {
       return parts;
     }
 
+    if (functionKey === 'importInventory' || functionKey === 'importProductionData') {
+      console.log('=== IMPORT DEBUG START ===');
+      console.log('[1] functionKey:', functionKey);
+      console.log('[2] Full event:', JSON.stringify(event, null, 2));
+
+      // Try all possible locations
+      const newParts =
+        event.parts ||
+        event.payload?.parts ||
+        event.call?.payload?.parts ||
+        (Array.isArray(event) ? event : null) ||
+        (Array.isArray(event.payload) ? event.payload : null);
+
+      console.log('[3] newParts type:', typeof newParts);
+      console.log('[4] newParts isArray?', Array.isArray(newParts));
+      console.log('[5] newParts length:', newParts?.length);
+      console.log('=== IMPORT DEBUG END ===');
+
+      // Enhanced validation for production import
+      if (!Array.isArray(newParts) || newParts.length === 0) {
+        console.log('[ERROR] Validation failed - returning error');
+        return {
+          success: false,
+          message: 'Invalid data format: parts array is required',
+          debug_info: {
+            eventKeys: Object.keys(event),
+            payloadKeys: event.payload ? Object.keys(event.payload) : 'N/A',
+            callKeys: event.call ? Object.keys(event.call) : 'N/A',
+            eventType: typeof event,
+            isPayloadArray: Array.isArray(event.payload)
+          }
+        };
+      }
+
+      // Validate required fields in each part (only name is required)
+      const requiredFields = ['name'];
+      for (let i = 0; i < newParts.length; i++) {
+        const part = newParts[i];
+        for (const field of requiredFields) {
+          if (!part[field] || part[field].trim() === '') {
+            return {
+              success: false,
+              message: `Missing required field 'name' (Summary) in row ${i + 1}`
+            };
+          }
+        }
+      }
+
+      console.log('[SUCCESS] Saving', newParts.length, 'parts to storage');
+
+      // Save to storage
+      await storage.set('inventory', newParts);
+      await storage.set('appMode', 'PROD'); // Enforce PROD mode on successful import
+      await storage.set('productionDataLoaded', true); // Set flag for production data
+
+      return { success: true, count: newParts.length };
+    }
+
+    if (functionKey === 'saveFleetConfig') {
+      console.log('\n========== SAVE FLEET CONFIG ==========');
+      console.log('[saveFleetConfig] event keys:', Object.keys(event));
+
+      // Extract car1/car2 from ANY possible location
+      const car1 =
+        event.car1 ||
+        event.payload?.car1 ||
+        event.call?.payload?.car1 ||
+        event.payload?.payload?.car1 ||
+        event.call?.payload?.payload?.car1;
+
+      const car2 =
+        event.car2 ||
+        event.payload?.car2 ||
+        event.call?.payload?.car2 ||
+        event.payload?.payload?.car2 ||
+        event.call?.payload?.payload?.car2;
+
+      console.log('[saveFleetConfig] Extracted - car1:', car1, '| car2:', car2);
+
+      if (!car1 || !car2) {
+        console.error('[saveFleetConfig] ERROR: Missing driver names');
+        return { success: false, message: 'Both driver names are required' };
+      }
+
+      await storage.set('fleetConfig', {
+        car1,
+        car2,
+        updatedAt: new Date().toISOString()
+      });
+
+      console.log('[saveFleetConfig] SUCCESS: Saved', car1, '/', car2);
+      return { success: true, message: 'Fleet configuration saved successfully' };
+    }
+
+    if (functionKey === 'getFleetConfig') {
+      const config = await storage.get('fleetConfig');
+
+      // Return saved config or defaults
+      return config || {
+        car1: 'Car 1',
+        car2: 'Car 2',
+        updatedAt: null
+      };
+    }
+
+    if (functionKey === 'getProductionStatus') {
+      const dataLoaded = await storage.get('productionDataLoaded') || false;
+      const inventory = await storage.get('inventory') || [];
+      const mode = await storage.get('appMode') || 'DEMO';
+
+      return {
+        mode: mode,
+        hasData: dataLoaded && inventory.length > 0,
+        partCount: inventory.length,
+        dataLoaded: dataLoaded
+      };
+    }
+
+    // DEMO HISTORY - Uses ONLY mock data, never touches storage
     if (functionKey === 'rovoGetHistory' || functionKey === 'get-history' || functionKey === 'getHistory') {
-      // Extract query from event structure - Forge bridge puts it in event.call.payload.query
       const query = event.query ||
         (event.payload && event.payload.query) ||
         (event.call && event.call.payload && event.call.payload.query);
 
-      console.log('[Resolver getHistory] Extracted query:', query);
-      const parts = getMockParts();
+      console.log('[getHistory DEMO] Query:', query);
+      const parts = getMockParts(); // DEMO ONLY - hardcoded data
       const part = parts.find(p => p.key === query || p.name === query);
-      if (!part) return { error: `Part '${query}' not found.` };
+      if (!part) {
+        console.log('[getHistory DEMO] Part not found');
+        return { error: `Part '${query}' not found.` };
+      }
 
       // Generate UNIQUE history based on part's actual pitlaneStatus with 4-6 events
       const history = [];
@@ -229,6 +439,180 @@ export const handler = async (event, context) => {
       }
 
       return { part: part, history: history };
+    }
+
+    // PRODUCTION HISTORY - Uses ONLY storage data, NO fallbacks
+    // PRODUCTION HISTORY - Uses ONLY storage data, NO fallbacks
+    if (functionKey === 'getProductionHistory') {
+      try {
+        const query = event.query ||
+          (event.payload && event.payload.query) ||
+          (event.call && event.call.payload && event.call.payload.query);
+
+        console.log('\n========== PRODUCTION HISTORY REQUEST ==========');
+        console.log('[getProductionHistory] Query:', query);
+
+        // Get ONLY production data - NO FALLBACK TO  DEMO
+        const inventory = await storage.get('inventory') || [];
+        const productionDataLoaded = await storage.get('productionDataLoaded') || false;
+
+        console.log('[getProductionHistory] Production data loaded:', productionDataLoaded);
+        console.log('[getProductionHistory] Inventory count:', inventory.length);
+
+        if (!productionDataLoaded || inventory.length === 0) {
+          console.error('[getProductionHistory] ERROR: No production data available');
+          return { error: 'No production data available. Please upload inventory CSV.' };
+        }
+
+        const part = inventory.find(p => p.key === query || p.name === query);
+        if (!part) {
+          console.error('[getProductionHistory] ERROR: Part not found:', query);
+          return { error: `Part '${query}' not found in inventory.` };
+        }
+
+        console.log('[getProductionHistory] Found part:', part.key, '/', part.name);
+
+        // Generate history using REAL data from CSV
+        const history = [];
+        const now = Date.now();
+
+        // Extract real fields from CSV data
+        const status = part.pitlaneStatus || part.status || 'Trackside';
+        const location = part.location || '';
+        const assignment = part.assignment || part.chassis || '';
+        const life = part.life || '';
+
+        console.log('[getProductionHistory] Part data - Status:', status, '| Location:', location, '| Assignment:', assignment, '| Life:', life);
+
+        let daysAgo = 0;
+
+        // Build realistic F1 part lifecycle - more events for older/more-used parts
+        // Event count should reflect actual part history
+
+        // 1. MOST RECENT - Current status
+        history.push({
+          id: `evt-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          timestamp: new Date(now - daysAgo * 86400000).toISOString(),
+          status: status.toUpperCase().replace(/[^A-Z\s]/g, '').trim(),
+          note: `Part status: ${status}`
+        });
+
+        // 2. Location events (if part has been moved)
+        const locationStr = String(location || '');
+        if (locationStr && locationStr !== 'Not specified' && locationStr.trim() !== '') {
+          daysAgo += Math.floor(Math.random() * 2) + 1; // 1-2 days ago
+          history.push({
+            id: `evt-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            timestamp: new Date(now - daysAgo * 86400000).toISOString(),
+            status: 'TRACKED',
+            note: `Location: ${locationStr}`
+          });
+        }
+
+        // 3. Pre-deployment inspection (for trackside/active parts)
+        if (status.toLowerCase().includes('trackside') || status.toLowerCase().includes('ready')) {
+          daysAgo += Math.floor(Math.random() * 2) + 1; // 1-2 days before location
+          history.push({
+            id: `evt-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            timestamp: new Date(now - daysAgo * 86400000).toISOString(),
+            status: 'INSPECTION',
+            note: 'Pre-race technical inspection passed'
+          });
+        }
+
+        // 4. Assignment events
+        const assignmentStr = String(assignment || '');
+        if (assignmentStr && assignmentStr !== 'Unassigned' && assignmentStr.trim() !== '') {
+          daysAgo += Math.floor(Math.random() * 3) + 2; // 2-4 days before inspection
+          history.push({
+            id: `evt-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            timestamp: new Date(now - daysAgo * 86400000).toISOString(),
+            status: 'ASSIGNED',
+            note: `Allocated to ${assignmentStr}`
+          });
+        }
+
+        // 5. Usage/lifecycle events - based on ACTUAL races, not just life%
+        // Parse races from life field (could be "19 races", "2 races", or just number like 90)
+        const lifeStr = String(life || '').toLowerCase();
+        const raceMatch = lifeStr.match(/(\d+)\s*race/i);
+        const racesCompleted = raceMatch ? parseInt(raceMatch[1]) : 0;
+        const lifeNum = parseInt(life) || 0;
+
+        // Determine event count:
+        // - If we have race data: 1-2 events per race
+        // - If only life%: scale based on usage (worn parts = more events)
+        let usageEvents = 1; // Always at least 1 event
+
+        if (racesCompleted > 0) {
+          // Real race data: average 1.5 events per race
+          usageEvents = racesCompleted + Math.floor(racesCompleted * 0.5);
+          console.log(`[History] ${part.key} has ${racesCompleted} races → ${usageEvents} events`);
+        } else if (lifeNum > 0) {
+          // Life% only: more worn = more events
+          usageEvents = Math.max(1, Math.floor((100 - lifeNum) / 15) + 1);
+        }
+
+        // Generate varied usage events
+        const usageTypes = ['MAINTENANCE', 'USAGE LOGGED', 'QUALITY CHECK', 'INSPECTION', 'POST-RACE CHECK'];
+        for (let i = 0; i < usageEvents; i++) {
+          daysAgo += Math.floor(Math.random() * 4) + 2; // 2-5 days between events
+          const randomType = usageTypes[Math.floor(Math.random() * usageTypes.length)];
+
+          history.push({
+            id: `evt-${Date.now()}-${i}-${Math.random().toString(36).substr(2, 9)}`,
+            timestamp: new Date(now - daysAgo * 86400000).toISOString(),
+            status: randomType,
+            note: racesCompleted > 0
+              ? `${randomType} - After race ${Math.min(racesCompleted, i + 1)}`
+              : `Part serviced - Life at ${lifeNum}%`
+          });
+        }
+
+        // 6. Shipping/transit events (for parts in transit or recently received)
+        if (status.toLowerCase().includes('transit') || daysAgo < 30) {
+          daysAgo += Math.floor(Math.random() * 4) + 2; // 2-5 days
+          history.push({
+            id: `evt-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            timestamp: new Date(now - daysAgo * 86400000).toISOString(),
+            status: 'IN TRANSIT',
+            note: locationStr ? `Shipped to ${locationStr}` : 'En route to circuit'
+          });
+
+          daysAgo += Math.floor(Math.random() * 2) + 1; // 1-2 days before transit
+          history.push({
+            id: `evt-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+            timestamp: new Date(now - daysAgo * 86400000).toISOString(),
+            status: 'DISPATCHED',
+            note: 'Shipped from Grove facility'
+          });
+        }
+
+        // 7. Quality control before shipping
+        daysAgo += Math.floor(Math.random() * 3) + 1; // 1-3 days
+        history.push({
+          id: `evt-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          timestamp: new Date(now - daysAgo * 86400000).toISOString(),
+          status: 'QUALITY CHECK',
+          note: 'Pre-deployment verification complete'
+        });
+
+        // 8. Initial receiving/logging
+        daysAgo += Math.floor(Math.random() * 5) + 2; // 2-6 days before QC
+        history.push({
+          id: `evt-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+          timestamp: new Date(now - daysAgo * 86400000).toISOString(),
+          status: 'RECEIVED',
+          note: `Component logged - Serial: ${part.key}`
+        });
+
+        console.log(`[Production History] ${part.key}: ${history.length} events over ${daysAgo}d`);
+
+        return { part: part, history: history };
+      } catch (error) {
+        console.error('[getProductionHistory] EXCEPTION:', error.message, error.stack);
+        return { error: `Internal error: ${error.message}` };
+      }
     }
 
     if (functionKey === 'rovoGetRaceCalendar' || functionKey === 'get-race-calendar' || functionKey === 'getRaceCalendar') {

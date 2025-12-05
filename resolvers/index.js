@@ -172,6 +172,104 @@ export const handler = async (event, context) => {
       return parts;
     }
 
+    if (functionKey === 'importInventory' || functionKey === 'importProductionData') {
+      console.log('=== IMPORT DEBUG START ===');
+      console.log('[1] functionKey:', functionKey);
+      console.log('[2] Full event:', JSON.stringify(event, null, 2));
+
+      // Try all possible locations
+      const newParts =
+        event.parts ||
+        event.payload?.parts ||
+        event.call?.payload?.parts ||
+        (Array.isArray(event) ? event : null) ||
+        (Array.isArray(event.payload) ? event.payload : null);
+
+      console.log('[3] newParts type:', typeof newParts);
+      console.log('[4] newParts isArray?', Array.isArray(newParts));
+      console.log('[5] newParts length:', newParts?.length);
+      console.log('=== IMPORT DEBUG END ===');
+
+      // Enhanced validation for production import
+      if (!Array.isArray(newParts) || newParts.length === 0) {
+        console.log('[ERROR] Validation failed - returning error');
+        return {
+          success: false,
+          message: 'Invalid data format: parts array is required',
+          debug_info: {
+            eventKeys: Object.keys(event),
+            payloadKeys: event.payload ? Object.keys(event.payload) : 'N/A',
+            callKeys: event.call ? Object.keys(event.call) : 'N/A',
+            eventType: typeof event,
+            isPayloadArray: Array.isArray(event.payload)
+          }
+        };
+      }
+
+      // Validate required fields in each part (only name is required)
+      const requiredFields = ['name'];
+      for (let i = 0; i < newParts.length; i++) {
+        const part = newParts[i];
+        for (const field of requiredFields) {
+          if (!part[field] || part[field].trim() === '') {
+            return {
+              success: false,
+              message: `Missing required field 'name' (Summary) in row ${i + 1}`
+            };
+          }
+        }
+      }
+
+      console.log('[SUCCESS] Saving', newParts.length, 'parts to storage');
+
+      // Save to storage
+      await storage.set('inventory', newParts);
+      await storage.set('appMode', 'PROD'); // Enforce PROD mode on successful import
+      await storage.set('productionDataLoaded', true); // Set flag for production data
+
+      return { success: true, count: newParts.length };
+    }
+
+    if (functionKey === 'saveFleetConfig') {
+      const config = event.payload || event;
+
+      if (!config.car1 || !config.car2) {
+        return { success: false, message: 'Both driver names are required' };
+      }
+
+      await storage.set('fleetConfig', {
+        car1: config.car1,
+        car2: config.car2,
+        updatedAt: new Date().toISOString()
+      });
+
+      return { success: true, message: 'Fleet configuration saved successfully' };
+    }
+
+    if (functionKey === 'getFleetConfig') {
+      const config = await storage.get('fleetConfig');
+
+      // Return saved config or defaults
+      return config || {
+        car1: 'Alex Albon',
+        car2: 'Carlos Sainz',
+        updatedAt: null
+      };
+    }
+
+    if (functionKey === 'getProductionStatus') {
+      const dataLoaded = await storage.get('productionDataLoaded') || false;
+      const inventory = await storage.get('inventory') || [];
+      const mode = await storage.get('appMode') || 'DEMO';
+
+      return {
+        mode: mode,
+        hasData: dataLoaded && inventory.length > 0,
+        partCount: inventory.length,
+        dataLoaded: dataLoaded
+      };
+    }
+
     if (functionKey === 'rovoGetHistory' || functionKey === 'get-history') {
       const query = event.query || (event.payload && event.payload.query);
       const parts = getMockParts();

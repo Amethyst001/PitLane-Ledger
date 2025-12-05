@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { invoke } from '@forge/bridge';
 import { Radio, Plus, QrCode, Smartphone } from 'lucide-react';
 import logo from '../pitlane.png';
@@ -8,8 +8,6 @@ import QRCodePanel from './QRCodePanel';
 import MobileControls from './MobileControls';
 
 const PartDetails = ({ issueId, issueKey, onClose }) => {
-    console.log('[PartDetails] Component mounted/updated with props:', { issueId, issueKey });
-
     const [history, setHistory] = useState(null);
     const [loading, setLoading] = useState(true);
     const [allParts, setAllParts] = useState([]);
@@ -17,50 +15,68 @@ const PartDetails = ({ issueId, issueKey, onClose }) => {
     const [currentPartId, setCurrentPartId] = useState(issueId);
     const [currentPartKey, setCurrentPartKey] = useState(issueKey);
 
+    // Track previous values to prevent unnecessary re-fetches
+    const prevPropsRef = useRef({ issueId, issueKey });
+    const dataFetchedRef = useRef(false);
+
     // Modal states
     const [showLogModal, setShowLogModal] = useState(false);
     const [showQRPanel, setShowQRPanel] = useState(false);
     const [isMobileMode, setIsMobileMode] = useState(false);
 
-    // CONSOLIDATED: Sync props to state AND fetch data (prevents race condition)
+    // Only fetch data when issueId/issueKey ACTUALLY change (not just re-render)
     useEffect(() => {
-        console.log('[PartDetails useEffect] Triggered with issueId:', issueId, 'issueKey:', issueKey);
+        const propsChanged =
+            prevPropsRef.current.issueId !== issueId ||
+            prevPropsRef.current.issueKey !== issueKey;
+
+        if (!propsChanged && dataFetchedRef.current) {
+            // Props haven't changed and data already fetched - skip
+            return;
+        }
+
+        prevPropsRef.current = { issueId, issueKey };
 
         // Update local state
         setCurrentPartId(issueId);
         setCurrentPartKey(issueKey);
 
         const fetchData = async () => {
-            // Use props directly to avoid stale state
-            const partId = issueId;
-            const partKey = issueKey;
-
-            console.log('[PartDetails fetchData] Using partId:', partId, 'partKey:', partKey);
-
             // Guard against undefined values
-            if (!partId && !partKey) {
-                console.warn('[PartDetails] No part ID or key provided - both are undefined!');
-                console.warn('[PartDetails] Props at guard check:', { issueId, issueKey });
+            if (!issueId && !issueKey) {
+                console.warn('[PartDetails] No part ID or key provided');
                 setLoading(false);
                 return;
             }
 
             setLoading(true);
             try {
-                const query = partKey || partId;
-                console.log('[PartDetails] Calling getHistory with query:', query);
+                const query = issueKey || issueId;
+
+                // Check if production data exists, otherwise use demo
+                const prodStatus = await invoke('getProductionStatus');
+                const useProduction = prodStatus?.hasData || false;
+
+                // Use SEPARATE resolvers for demo vs prod
+                const partsResolver = useProduction ? 'getProductionParts' : 'getDemoParts';
+                const historyResolver = useProduction ? 'getProductionHistory' : 'getHistory';
 
                 const [historyData, partsData] = await Promise.all([
-                    invoke('getHistory', { key: 'getHistory', query }),
-                    invoke('getAllParts', { key: 'getAllParts' })
+                    invoke(historyResolver, { query }),
+                    invoke(partsResolver)
                 ]);
 
-                console.log('[PartDetails] Received historyData:', historyData);
-                console.log('[PartDetails] historyData FULL:', JSON.stringify(historyData, null, 2));
-                const historyArray = historyData.history || (Array.isArray(historyData) ? historyData : []);
-                console.log('[PartDetails] Extracted historyArray:', historyArray);
-                setHistory(historyArray);
+                // Check for errors in response
+                if (historyData?.error) {
+                    console.error('[PartDetails] History error:', historyData.error);
+                    setHistory([]); // Show empty rather than crash
+                } else {
+                    const historyArray = historyData?.history || (Array.isArray(historyData) ? historyData : []);
+                    setHistory(historyArray);
+                }
+
                 setAllParts(Array.isArray(partsData) ? partsData : []);
+                dataFetchedRef.current = true;
                 setLoading(false);
             } catch (error) {
                 console.error('[PartDetails] Error loading telemetry:', error);
@@ -76,21 +92,35 @@ const PartDetails = ({ issueId, issueKey, onClose }) => {
         setCurrentPartId(partId);
         setCurrentPartKey(partKey);
 
-        // Immediately fetch new data
-        setLoading(true);
-        try {
-            const query = partKey || partId;
-            console.log('[PartDetails] Fetching history for new part:', query);
+        // Don't refetch - part data is already in allParts, just update history from existing part
+        const selectedPart = allParts.find(p => p.key === partKey);
+        console.log('[PartDetails] selectedPart found:', !!selectedPart, '| has history:', !!selectedPart?.history);
 
-            const historyData = await invoke('getHistory', { key: 'getHistory', query });
-            console.log('[PartDetails] New historyData:', historyData);
+        if (selectedPart && selectedPart.history) {
+            // Part already has history, just update state instantly
+            console.log('[PartDetails] Using cached history:', selectedPart.history.length, 'events');
+            setHistory(selectedPart.history);
+        } else {
+            // Only fetch if history not already loaded
+            console.log('[PartDetails] Fetching history for:', partKey);
+            setLoading(true);
+            try {
+                const query = partKey || partId;
+                const prodStatus = await invoke('getProductionStatus');
+                const useProduction = prodStatus?.hasData || false;
+                const historyResolver = useProduction ? 'getProductionHistory' : 'getHistory';
 
-            const historyArray = historyData.history || (Array.isArray(historyData) ? historyData : []);
-            setHistory(historyArray);
-            setLoading(false);
-        } catch (error) {
-            console.error('[PartDetails] Error loading new part:', error);
-            setLoading(false);
+                console.log('[PartDetails] Calling', historyResolver, 'with query:', query);
+                const historyData = await invoke(historyResolver, { query });
+                console.log('[PartDetails] History response:', historyData);
+
+                const historyArray = historyData.history || (Array.isArray(historyData) ? historyData : []);
+                setHistory(historyArray);
+                setLoading(false);
+            } catch (error) {
+                console.error('[PartDetails] Error loading new part:', error);
+                setLoading(false);
+            }
         }
     };
 
@@ -227,7 +257,7 @@ const PartDetails = ({ issueId, issueKey, onClose }) => {
                     <div className="shimmer" style={{ width: '100%', height: '80px', marginBottom: '16px' }} />
                     <div className="shimmer" style={{ width: '100%', height: '80px', marginBottom: '16px' }} />
                     <div className="shimmer" style={{ width: '100%', height: '80px' }} />
-                    <div style={styles.loadingText}>🏎️ Loading Telemetry...</div>
+                    <div style={styles.loadingText}>Loading Telemetry...</div>
                 </div>
             ) : (
                 <>
@@ -285,9 +315,12 @@ const styles = {
     container: {
         backgroundColor: 'var(--color-bg-primary)',
         minHeight: '100%',
+        maxWidth: '100vw', // Prevent overflow
         padding: 'var(--spacing-lg)',
         fontFamily: 'var(--font-sans)',
-        color: 'var(--color-text-primary)'
+        color: 'var(--color-text-primary)',
+        boxSizing: 'border-box', // Include padding in width
+        overflowX: 'hidden' // Prevent horizontal scroll
     },
     header: {
         marginBottom: 'var(--spacing-xl)',
@@ -346,9 +379,11 @@ const styles = {
         fontSize: '13px',
         fontWeight: 600,
         flex: '1 1 auto',
-        maxWidth: '500px',
+        minWidth: 0, // Allow shrinking below content size
+        width: '100%', // Stretch to fill available space
         cursor: 'pointer',
-        outline: 'none'
+        outline: 'none',
+        boxSizing: 'border-box' // Include padding/border in width
     },
     actionGroup: {
         display: 'flex',

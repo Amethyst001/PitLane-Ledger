@@ -18,6 +18,7 @@ const CarConfigurator = ({ onPartSelect, parts }) => {
         if (!parts || parts.length === 0) return 'OK';
 
         // Filter for parts in this zone, EXCLUDING retired/scrapped
+        // NOTE: 'parts' here is already filtered by Chassis (Car 1/2) if selected in Dashboard
         const zoneParts = parts.filter(part =>
             getZoneForPart(part.name) === zoneName &&
             !['RETIRED', 'SCRAPPED'].includes(part.pitlaneStatus)
@@ -25,21 +26,23 @@ const CarConfigurator = ({ onPartSelect, parts }) => {
 
         if (zoneParts.length === 0) return 'OK';
 
-        // 1. CRITICAL (Red): DAMAGED or Life <= 1
+        // 1. CRITICAL (Red): DAMAGED or Life <= 1 OR Predictive Critical
         const hasCritical = zoneParts.some(p =>
             p.pitlaneStatus?.includes('DAMAGED') ||
-            p.lifeRemaining <= 1
+            p.lifeRemaining <= 1 ||
+            p.predictiveStatus === 'CRITICAL'
         );
         if (hasCritical) return 'CRITICAL';
 
-        // 2. WARNING (Orange): IN TRANSIT or Life == 2
+        // 2. WARNING (Orange): IN TRANSIT or Life == 2 or Warning
         const hasWarning = zoneParts.some(p =>
             p.pitlaneStatus?.includes('Transit') ||
-            p.lifeRemaining === 2
+            p.lifeRemaining === 2 ||
+            p.predictiveStatus === 'WARNING'
         );
         if (hasWarning) return 'WARNING';
 
-        // 3. OK (Green): TRACKSIDE and Life > 2 (Implicit if not Critical or Warning)
+        // 3. OK (Green)
         return 'OK';
     };
 
@@ -76,13 +79,6 @@ const CarConfigurator = ({ onPartSelect, parts }) => {
                 strokeWidth: isActive ? activeStroke : inactiveStroke,
                 glow: '0 0 15px rgba(245, 158, 11, 0.6)'
             };
-        } else if (status === 'CAUTION') {
-            return {
-                fill: isActive ? 'rgba(0, 184, 217, 0.5)' : 'rgba(0, 184, 217, 0.2)',
-                stroke: isActive ? '#00D9FF' : '#00B8D9',
-                strokeWidth: isActive ? activeStroke : inactiveStroke,
-                glow: '0 0 12px rgba(0, 184, 217, 0.5)'
-            };
         } else {
             return {
                 fill: isActive ? 'rgba(0, 208, 132, 0.5)' : 'rgba(0, 208, 132, 0.15)',
@@ -107,7 +103,7 @@ const CarConfigurator = ({ onPartSelect, parts }) => {
             border: '1px solid var(--color-border-subtle)',
             overflow: 'hidden',
             boxShadow: 'var(--shadow-soft)',
-            height: '450px' // Fixed height to match PredictiveTimeline
+            height: '450px'
         }}>
             <div style={{
                 padding: '20px',
@@ -164,7 +160,7 @@ const CarConfigurator = ({ onPartSelect, parts }) => {
                         <path id="monocoqueCurve" d="M 160,132 Q 200,118 240,120" fill="none" />
                     </defs>
 
-                    {/* Monocoque with raised halo */}
+                    {/* Monocoque */}
                     <g onClick={() => handlePartClick('Monocoque')} style={{ transition: 'all 0.3s ease', filter: `drop-shadow(${monocoqueStyle.glow})` }}>
                         <path d="M 140,140 L 160,135 Q 200,125 240,122 L 320,120 L 320,160 L 240,162 Q 200,165 160,175 L 140,175 Z"
                             fill={monocoqueStyle.fill} stroke={monocoqueStyle.stroke} strokeWidth={monocoqueStyle.strokeWidth} strokeLinejoin="round" />
@@ -198,7 +194,7 @@ const CarConfigurator = ({ onPartSelect, parts }) => {
                         <line x1="740" y1="75" x2="740" y2="108" stroke={rearWingStyle.stroke} strokeWidth="3" />
                     </g>
 
-                    {/* Floor - F1 underbody with diffuser */}
+                    {/* Floor */}
                     <g onClick={() => handlePartClick('Floor')} style={{ transition: 'all 0.3s ease', filter: `drop-shadow(${floorStyle.glow})` }}>
                         <path d="M 180,175 L 540,175 L 560,173 L 600,170 L 600,177 L 560,180 L 540,182 L 180,182 Z"
                             fill={floorStyle.fill} stroke={floorStyle.stroke} strokeWidth={floorStyle.strokeWidth} />
@@ -225,7 +221,6 @@ const CarConfigurator = ({ onPartSelect, parts }) => {
 
                     {/* Text Labels */}
                     <g style={{ pointerEvents: 'none' }}>
-                        {/* MONOCOQUE curved along path */}
                         <text fontSize="11" fontWeight="700" letterSpacing="1px" fill={monocoqueStyle.stroke} dy="-2">
                             <textPath href="#monocoqueCurve" startOffset="50%" textAnchor="middle">
                                 MONOCOQUE

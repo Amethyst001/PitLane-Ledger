@@ -1,0 +1,37 @@
+// Quick reference for adding getProductionHistory after line 382 in index.js:
+
+    // PRODUCTION HISTORY - Uses ONLY storage data, NO fallbacks
+    if (functionKey === 'getProductionHistory') {
+      const query = event.query ||
+        (event.payload && event.payload.query) ||
+        (event.call && event.call.payload && event.call.payload.query);
+
+      console.log('[getProductionHistory] Query:', query);
+      
+      // Get ONLY production data - NO FALLBACK
+      const inventory = await storage.get('inventory') || [];
+      const productionDataLoaded = await storage.get('productionDataLoaded') || false;
+      
+      if (!productionDataLoaded || inventory.length === 0) {
+        console.log('[getProductionHistory] No production data');
+        return { error: 'No production data available. Please upload inventory CSV.' };
+      }
+      
+      const part = inventory.find(p => p.key === query || p.name === query);
+      if (!part) {
+        console.log('[getProductionHistory] Part not found in inventory');
+        return { error: `Part '${query}' not found in inventory.` };
+      }
+      
+      // Generate history for production part
+      const history = [];
+      const lastUpdate = new Date(part.lastUpdated || Date.now()).getTime();
+      
+      // Simple generic history for production parts (can be enhanced later)
+      history.push({ id: uuid(), timestamp: new Date(lastUpdate).toISOString(), status: 'CURRENT STATUS', note: `Part status: ${part.pitlaneStatus || 'Unknown'}` });
+      history.push({ id: uuid(), timestamp: new Date(lastUpdate - 1 * 86400000).toISOString(), status: 'TRACKED', note: `Location: ${part.location || 'Not specified'}` });
+      history.push({ id: uuid(), timestamp: new Date(lastUpdate - 3 * 86400000).toISOString(), status: 'ASSIGNED', note: `Assignment: ${part.assignment || 'Not assigned'}` });
+      history.push({ id: uuid(), timestamp: new Date(lastUpdate - 7 * 86400000).toISOString(), status: 'LOGGED', note: `Component logged - Serial: ${part.key}` });
+      
+      return { part: part, history: history };
+    }
