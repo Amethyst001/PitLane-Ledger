@@ -27,6 +27,7 @@ const PredictiveTimeline = ({ parts, calendar = [], onOpenSettings }) => {
     const inTransit = parts.filter(p => p.pitlaneStatus.includes('Transit')).length;
 
     const [visibleRaces, setVisibleRaces] = React.useState(3);
+    const [visibleEOLCount, setVisibleEOLCount] = React.useState(10);
 
     const toggleShowMore = () => {
         setVisibleRaces(prev => prev === 3 ? upcomingRaces.length : 3);
@@ -50,7 +51,7 @@ const PredictiveTimeline = ({ parts, calendar = [], onOpenSettings }) => {
 
                 {criticalParts.length > 0 && (
                     <div style={styles.eolGroup}>
-                        {criticalParts.map(part => (
+                        {criticalParts.slice(0, visibleEOLCount).map(part => (
                             <div key={part.id} style={{ ...styles.eolItem, ...styles.criticalEol }}>
                                 <div style={styles.eolName}>{part.name}</div>
                                 <div style={styles.eolBadge}>🔴 {part.lifeRemaining} {part.lifeRemaining === 1 ? 'race' : 'races'}</div>
@@ -61,7 +62,7 @@ const PredictiveTimeline = ({ parts, calendar = [], onOpenSettings }) => {
 
                 {warningParts.length > 0 && (
                     <div style={styles.eolGroup}>
-                        {warningParts.map(part => (
+                        {warningParts.slice(0, Math.max(0, visibleEOLCount - criticalParts.length)).map(part => (
                             <div key={part.id} style={{ ...styles.eolItem, ...styles.warningEol }}>
                                 <div style={styles.eolName}>{part.name}</div>
                                 <div style={styles.eolBadgeWarning}>🟠 {part.lifeRemaining} races</div>
@@ -73,6 +74,25 @@ const PredictiveTimeline = ({ parts, calendar = [], onOpenSettings }) => {
                 {criticalParts.length === 0 && warningParts.length === 0 && (
                     <div style={styles.allClear}>
                         ✅ All parts within safe operating window
+                    </div>
+                )}
+
+                {(criticalParts.length + warningParts.length) > 10 && visibleEOLCount < (criticalParts.length + warningParts.length) && (
+                    <div style={{ padding: '12px 0', textAlign: 'center' }}>
+                        <button
+                            onClick={() => setVisibleEOLCount(criticalParts.length + warningParts.length)}
+                            style={styles.showMoreBtn}
+                            onMouseEnter={(e) => {
+                                e.currentTarget.style.background = 'var(--color-accent-cyan)';
+                                e.currentTarget.style.color = '#0A0E1A';
+                            }}
+                            onMouseLeave={(e) => {
+                                e.currentTarget.style.background = 'transparent';
+                                e.currentTarget.style.color = 'var(--color-accent-cyan)';
+                            }}
+                        >
+                            Show More ({(criticalParts.length + warningParts.length) - visibleEOLCount} more)
+                        </button>
                     </div>
                 )}
             </div>

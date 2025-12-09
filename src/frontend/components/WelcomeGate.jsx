@@ -12,6 +12,19 @@ import wrCar2024RightImage from '../Image files/WR car 2024 right.avif';
 import wrImage from '../Image files/WR.avif';
 
 const WelcomeGate = ({ onEnter }) => {
+    const [isLoading, setIsLoading] = useState(false);
+
+    const handleEnter = async () => {
+        setIsLoading(true);
+        try {
+            await onEnter();
+        } catch (error) {
+            console.error('Error entering:', error);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
     // Image config with individual blur and zoom settings
     const imageConfigs = [
         { src: carWRImage, blur: 3, zoom: 100 },              // Car WR - normal
@@ -74,9 +87,17 @@ const WelcomeGate = ({ onEnter }) => {
                     </div>
                 </div>
 
-                <button onClick={onEnter} style={styles.enterButton}>
-                    <span>ENTER PIT LANE</span>
-                    <ArrowRight size={20} />
+                <button
+                    onClick={handleEnter}
+                    disabled={isLoading}
+                    style={{
+                        ...styles.enterButton,
+                        opacity: isLoading ? 0.6 : 1,
+                        cursor: isLoading ? 'not-allowed' : 'pointer'
+                    }}
+                >
+                    <span>{isLoading ? 'LOADING...' : 'ENTER PIT LANE'}</span>
+                    {!isLoading && <ArrowRight size={20} />}
                 </button>
 
                 <div style={styles.footer}>

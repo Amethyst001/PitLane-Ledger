@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { invoke } from '@forge/bridge';
-import { Download, Link, Printer, Users, ArrowLeft, ArrowRight, Check } from 'lucide-react';
+import { Download, Link, Printer, Users, ArrowLeft, ArrowRight } from 'lucide-react';
 import Toast from './Toast';
 
 const OnboardingGuide = ({ onBack, onComplete }) => {
@@ -9,6 +9,7 @@ const OnboardingGuide = ({ onBack, onComplete }) => {
     const [savedDrivers, setSavedDrivers] = useState(false);
     const [toast, setToast] = useState(null);
     const [csvUploaded, setCsvUploaded] = useState(false);
+    const [loadingStep, setLoadingStep] = useState(null); // Track which step is loading
     const fileInputRef = useRef(null);
 
     const showToast = (message, type = 'info') => {
@@ -89,7 +90,7 @@ const OnboardingGuide = ({ onBack, onComplete }) => {
         }
     ];
 
-    const handleFileUpload = (event) => {
+    const handleFileUpload = async (event) => {
         const file = event.target.files[0];
         if (!file) return;
 
@@ -97,6 +98,8 @@ const OnboardingGuide = ({ onBack, onComplete }) => {
             showToast('Please select a valid CSV file.', 'warning');
             return;
         }
+
+        setLoadingStep(0); // Step 0 is the upload step
 
         const reader = new FileReader();
         reader.onload = async (e) => {
@@ -193,6 +196,8 @@ const OnboardingGuide = ({ onBack, onComplete }) => {
             } catch (error) {
                 console.error('CSV parsing error:', error);
                 showToast('Failed to parse CSV file. Please check the format and try again.', 'error');
+            } finally {
+                setLoadingStep(null);
             }
         };
 
@@ -200,43 +205,45 @@ const OnboardingGuide = ({ onBack, onComplete }) => {
     };
 
     const handleAction = async (step, index) => {
-        if (step.actionType === 'copy') {
-            navigator.clipboard.writeText(step.linkText);
-            setCopiedStep(index);
-            setTimeout(() => setCopiedStep(null), 2000);
-        } else if (step.actionType === 'download') {
-            const csvContent = 'Summary,Status,Key,Assignment,Life Remaining,Location,Priority,Description\n' +
-                'Power Unit ICE #1,Trackside,PIT-101,Car 1,5,Garage 1,High,"Primary power unit for Car 23"\n' +
-                'Front Wing Assembly,In Transit,PIT-201,Spares,6,DHL Cargo,Medium,"Spare wing for Monaco setup"\n' +
-                'Gearbox Casing,Manufactured,PIT-301,Car 2,8,Grove Factory,High,"New titanium casing for Car 55"\n';
-            const blob = new Blob([csvContent], { type: 'text/csv' });
-            const url = window.URL.createObjectURL(blob);
-            const a = document.createElement('a');
-            a.href = url;
-            a.download = 'pitlane-inventory-template.csv';
-            document.body.appendChild(a);
-            a.click();
-            document.body.removeChild(a);
-            window.URL.revokeObjectURL(url);
-            setCopiedStep(index);
-            setTimeout(() => setCopiedStep(null), 2000);
-        } else if (step.actionType === 'generate') {
-            // Check if CSV has been uploaded
-            if (!csvUploaded) {
-                showToast('⚠️ Please upload a CSV file first before generating QR codes.', 'warning');
-                return;
-            }
-
-            try {
-                // Use production inventory for QR generation (CSV upload happens before this step)
-                const allParts = await invoke('getProductionParts');
-
-                if (!allParts || allParts.length === 0) {
-                    showToast('⚠️ No inventory data found. Please upload a CSV file first before generating QR codes.', 'warning');
+        setLoadingStep(index);
+        try {
+            if (step.actionType === 'copy') {
+                navigator.clipboard.writeText(step.linkText);
+                setCopiedStep(index);
+                setTimeout(() => setCopiedStep(null), 2000);
+            } else if (step.actionType === 'download') {
+                const csvContent = 'Summary,Status,Key,Assignment,Life Remaining,Location,Priority,Description\n' +
+                    'Power Unit ICE #1,Trackside,PIT-101,Car 1,5,Garage 1,High,"Primary power unit for Car 23"\n' +
+                    'Front Wing Assembly,In Transit,PIT-201,Spares,6,DHL Cargo,Medium,"Spare wing for Monaco setup"\n' +
+                    'Gearbox Casing,Manufactured,PIT-301,Car 2,8,Grove Factory,High,"New titanium casing for Car 55"\n';
+                const blob = new Blob([csvContent], { type: 'text/csv' });
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = 'pitlane-inventory-template.csv';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                window.URL.revokeObjectURL(url);
+                setCopiedStep(index);
+                setTimeout(() => setCopiedStep(null), 2000);
+            } else if (step.actionType === 'generate') {
+                // Check if CSV has been uploaded
+                if (!csvUploaded) {
+                    showToast('⚠️ Please upload a CSV file first before generating QR codes.', 'warning');
                     return;
                 }
 
-                const htmlContent = `
+                try {
+                    // Use production inventory for QR generation (CSV upload happens before this step)
+                    const allParts = await invoke('getProductionParts');
+
+                    if (!allParts || allParts.length === 0) {
+                        showToast('⚠️ No inventory data found. Please upload a CSV file first before generating QR codes.', 'warning');
+                        return;
+                    }
+
+                    const htmlContent = `
 <!DOCTYPE html>
 <html>
 <head>
@@ -280,45 +287,48 @@ const OnboardingGuide = ({ onBack, onComplete }) => {
 </body>
 </html>`;
 
-                const blob = new Blob([htmlContent], { type: 'text/html' });
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement('a');
-                a.href = url;
-                a.download = `pitlane-qr-codes-${new Date().toISOString().slice(0, 10)}.html`;
-                document.body.appendChild(a);
-                a.click();
-                setTimeout(() => {
-                    document.body.removeChild(a);
-                    window.URL.revokeObjectURL(url);
-                }, 100);
+                    const blob = new Blob([htmlContent], { type: 'text/html' });
+                    const url = window.URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `pitlane-qr-codes-${new Date().toISOString().slice(0, 10)}.html`;
+                    document.body.appendChild(a);
+                    a.click();
+                    setTimeout(() => {
+                        document.body.removeChild(a);
+                        window.URL.revokeObjectURL(url);
+                    }, 100);
 
-                setCopiedStep(index);
-                setTimeout(() => setCopiedStep(null), 2000);
-                showToast(`Generated QR codes for ${allParts.length} parts. Opening download...`, 'success');
-            } catch (error) {
-                console.error('Failed to generate QR view:', error);
-                showToast('Failed to generate QR codes. Please try again.', 'error');
-            }
-        } else if (step.actionType === 'saveDrivers') {
-            try {
-                console.log('[DEBUG] Saving drivers - driverNames:', driverNames);
-                console.log('[DEBUG] Sending payload:', { payload: driverNames });
-
-                const result = await invoke('saveFleetConfig', { payload: driverNames });
-
-                console.log('[DEBUG] Save result:', JSON.stringify(result, null, 2));
-
-                if (result.success) {
-                    setSavedDrivers(true);
-                    setTimeout(() => setSavedDrivers(false), 2000);
-                    showToast('Fleet configuration saved successfully!', 'success');
-                } else {
-                    showToast(`Failed to save: ${result.message}`, 'error');
+                    setCopiedStep(index);
+                    setTimeout(() => setCopiedStep(null), 2000);
+                    showToast(`Generated QR codes for ${allParts.length} parts. Opening download...`, 'success');
+                } catch (error) {
+                    console.error('Failed to generate QR view:', error);
+                    showToast('Failed to generate QR codes. Please try again.', 'error');
                 }
-            } catch (error) {
-                console.error('Failed to save fleet config:', error);
-                showToast('Failed to save fleet configuration. Please try again.', 'error');
+            } else if (step.actionType === 'saveDrivers') {
+                try {
+                    console.log('[DEBUG] Saving drivers - driverNames:', driverNames);
+                    console.log('[DEBUG] Sending payload:', { payload: driverNames });
+
+                    const result = await invoke('saveFleetConfig', { payload: driverNames });
+
+                    console.log('[DEBUG] Save result:', JSON.stringify(result, null, 2));
+
+                    if (result.success) {
+                        setSavedDrivers(true);
+                        setTimeout(() => setSavedDrivers(false), 2000);
+                        showToast('Fleet configuration saved successfully!', 'success');
+                    } else {
+                        showToast(`Failed to save: ${result.message}`, 'error');
+                    }
+                } catch (error) {
+                    console.error('Failed to save fleet config:', error);
+                    showToast('Failed to save fleet configuration. Please try again.', 'error');
+                }
             }
+        } finally {
+            setLoadingStep(null);
         }
     };
 
@@ -372,17 +382,28 @@ const OnboardingGuide = ({ onBack, onComplete }) => {
                                 <div style={styles.actionButtons}>
                                     <button
                                         onClick={() => handleAction(step, index)}
-                                        style={styles.primaryBtn}
+                                        disabled={loadingStep !== null}
+                                        style={{
+                                            ...styles.primaryBtn,
+                                            opacity: loadingStep !== null ? 0.6 : 1,
+                                            cursor: loadingStep !== null ? 'not-allowed' : 'pointer'
+                                        }}
                                     >
-                                        {copiedStep === index || (step.actionType === 'saveDrivers' && savedDrivers) ?
-                                            <><Check size={16} /> Done</> : step.action}
+                                        {loadingStep === index ? 'Loading...' :
+                                            (copiedStep === index || (step.actionType === 'saveDrivers' && savedDrivers) ?
+                                                <><Check size={16} /> Done</> : step.action)}
                                     </button>
                                     {step.action2 && (
                                         <button
                                             onClick={() => fileInputRef.current.click()}
-                                            style={styles.secondaryBtn}
+                                            disabled={loadingStep !== null}
+                                            style={{
+                                                ...styles.secondaryBtn,
+                                                opacity: loadingStep !== null ? 0.6 : 1,
+                                                cursor: loadingStep !== null ? 'not-allowed' : 'pointer'
+                                            }}
                                         >
-                                            {step.action2}
+                                            {loadingStep === 0 ? 'Uploading...' : step.action2}
                                         </button>
                                     )}
                                 </div>
@@ -400,11 +421,19 @@ const OnboardingGuide = ({ onBack, onComplete }) => {
                 />
 
                 <div style={styles.footer}>
-                    <button style={styles.secondaryBtn} onClick={onBack}>
+                    <button
+                        style={styles.secondaryBtn}
+                        onClick={onBack}
+                        disabled={loadingStep !== null}
+                    >
                         <ArrowLeft size={16} />
                         Back to Selection
                     </button>
-                    <button style={styles.primaryBtn} onClick={onComplete}>
+                    <button
+                        style={styles.primaryBtn}
+                        onClick={onComplete}
+                        disabled={loadingStep !== null}
+                    >
                         Enter Dashboard
                         <ArrowRight size={16} />
                     </button>

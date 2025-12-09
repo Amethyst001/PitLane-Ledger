@@ -4,8 +4,10 @@ import { Play, Rocket, ArrowRight } from 'lucide-react';
 import BackgroundCarousel from './BackgroundCarousel';
 
 const ModeSelection = ({ onSelectMode }) => {
+    const [isLoading, setIsLoading] = React.useState(null); // 'DEMO' or 'PROD' when loading
 
     const handleSelection = async (mode) => {
+        setIsLoading(mode);
         try {
             // Persist the mode selection to the backend
             await invoke('setAppMode', { mode });
@@ -14,6 +16,8 @@ const ModeSelection = ({ onSelectMode }) => {
             console.error('Failed to set app mode:', error);
             // Fallback to client-side navigation even if storage fails
             onSelectMode(mode);
+        } finally {
+            setIsLoading(null);
         }
     };
 
@@ -26,7 +30,15 @@ const ModeSelection = ({ onSelectMode }) => {
 
                 <div style={styles.grid}>
                     {/* DEMO MODE */}
-                    <button onClick={() => handleSelection('DEMO')} style={styles.card}>
+                    <button
+                        onClick={() => handleSelection('DEMO')}
+                        disabled={isLoading !== null}
+                        style={{
+                            ...styles.card,
+                            opacity: isLoading !== null ? 0.6 : 1,
+                            cursor: isLoading !== null ? 'not-allowed' : 'pointer'
+                        }}
+                    >
                         <div style={styles.iconWrapper}>
                             <Play size={32} color="#00D084" />
                         </div>
@@ -36,13 +48,21 @@ const ModeSelection = ({ onSelectMode }) => {
                                 Enter with pre-populated mock data. Ideal for hackathon judging and testing features without setup.
                             </p>
                             <div style={styles.fakeLink}>
-                                Launch Demo <ArrowRight size={16} />
+                                {isLoading === 'DEMO' ? 'Loading...' : 'Launch Demo'} <ArrowRight size={16} />
                             </div>
                         </div>
                     </button>
 
                     {/* PRODUCTION MODE */}
-                    <button onClick={() => handleSelection('PROD')} style={styles.card}>
+                    <button
+                        onClick={() => handleSelection('PROD')}
+                        disabled={isLoading !== null}
+                        style={{
+                            ...styles.card,
+                            opacity: isLoading !== null ? 0.6 : 1,
+                            cursor: isLoading !== null ? 'not-allowed' : 'pointer'
+                        }}
+                    >
                         <div style={styles.iconWrapper}>
                             <Rocket size={32} color="#00B8D9" />
                         </div>
@@ -52,7 +72,7 @@ const ModeSelection = ({ onSelectMode }) => {
                                 Start with a clean slate. Configure drivers, import CSV inventory, and set up the team.
                             </p>
                             <div style={styles.fakeLink}>
-                                Start Onboarding <ArrowRight size={16} />
+                                {isLoading === 'PROD' ? 'Loading...' : 'Start Onboarding'} <ArrowRight size={16} />
                             </div>
                         </div>
                     </button>

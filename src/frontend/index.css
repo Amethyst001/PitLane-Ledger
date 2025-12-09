@@ -90,6 +90,9 @@ body {
   background-color: var(--color-bg-primary);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+
+  /* Dynamic viewport scaling - calculated by App.jsx */
+  zoom: var(--dynamic-scale, 1);
 }
 
 /* === UTILITY CLASSES === */

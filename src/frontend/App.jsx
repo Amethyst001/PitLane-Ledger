@@ -3,6 +3,7 @@ import { view, requestJira, invoke } from '@forge/bridge';
 import IssuePanel from './components/IssuePanel';
 import Dashboard from './components/Dashboard';
 import MobileControls from './components/MobileControls';
+import PartDetails from './components/PartDetails';
 import WelcomeGate from './components/WelcomeGate';
 import ModeSelection from './components/ModeSelection';
 import OnboardingGuide from './components/OnboardingGuide';
@@ -16,6 +17,75 @@ const App = () => {
     const [showOnboarding, setShowOnboarding] = useState(false);
     const [loading, setLoading] = useState(true);
     const [appMode, setAppMode] = useState(null); // 'DEMO' or 'PROD' - purely in React state
+    const [mobilePartKey, setMobilePartKey] = useState(null); // Part key selected in mobile scanner
+
+    // Dynamic Scaling: Calculate ideal zoom based on viewport
+    useEffect(() => {
+        const calculateScale = () => {
+            // WelcomeGate natural content height (logo -> footer)
+            const WELCOME_GATE_HEIGHT = 800; // Approximate total height in px
+            const viewportHeight = window.innerHeight;
+
+            // Calculate scale to fit perfectly (min 0.5 to avoid too small, max 1.0 for native size)
+            const calculatedScale = Math.min(1.0, Math.max(0.5, viewportHeight / WELCOME_GATE_HEIGHT));
+
+            // Apply to root for global effect
+            document.documentElement.style.setProperty('--dynamic-scale', calculatedScale);
+            console.log(`[App] Dynamic scale applied: ${(calculatedScale * 100).toFixed(0)}% (viewport: ${viewportHeight}px)`);
+        };
+
+        calculateScale();
+        window.addEventListener('resize', calculateScale);
+        return () => window.removeEventListener('resize', calculateScale);
+    }, []);
+
+    // Auto View Switching: Smart toggle between mobile/desktop based on viewport
+    useEffect(() => {
+        let debounceTimer = null;
+        const MOBILE_BREAKPOINT = 900; // Slightly higher for better tablet detection
+        const MIN_STABLE_TIME = 500; // 500ms to prevent accidental toggles
+
+        const checkMobileSignals = () => {
+            const signals = {
+                narrowWidth: window.innerWidth < MOBILE_BREAKPOINT,
+                touchDevice: ('ontouchstart' in window) || navigator.maxTouchPoints > 0,
+                mobileUA: /Android|iPhone|iPad|iPod|webOS|BlackBerry/i.test(navigator.userAgent),
+                portraitMode: window.innerHeight > window.innerWidth
+            };
+            // Count strong mobile signals
+            const strongSignals = [signals.narrowWidth, signals.mobileUA].filter(Boolean).length;
+            return {
+                shouldBeMobile: signals.narrowWidth || (strongSignals >= 1 && signals.touchDevice),
+                signals
+            };
+        };
+
+        const handleResize = () => {
+            clearTimeout(debounceTimer);
+            debounceTimer = setTimeout(() => {
+                const { shouldBeMobile, signals } = checkMobileSignals();
+
+                if (shouldBeMobile && !isMobileMode) {
+                    console.log('[App] Switching to Mobile View. Signals:', signals);
+                    setIsMobileMode(true);
+                } else if (!shouldBeMobile && isMobileMode) {
+                    console.log('[App] Switching to Dashboard View. Signals:', signals);
+                    setIsMobileMode(false);
+                    setMobilePartKey(null);
+                }
+            }, MIN_STABLE_TIME);
+        };
+
+        // Also listen to orientation changes for mobile devices
+        window.addEventListener('resize', handleResize);
+        window.addEventListener('orientationchange', handleResize);
+
+        return () => {
+            clearTimeout(debounceTimer);
+            window.removeEventListener('resize', handleResize);
+            window.removeEventListener('orientationchange', handleResize);
+        };
+    }, [isMobileMode]);
 
     useEffect(() => {
         const init = async () => {
@@ -23,19 +93,63 @@ const App = () => {
             setContext(ctx);
 
             // 1. Role-Based Routing (Pit Crew -> Mobile)
+            let isMobile = false;
             try {
                 const response = await requestJira('/rest/api/3/myself?expand=groups');
                 if (response.ok) {
                     const userData = await response.json();
                     const groups = userData.groups?.items?.map(g => g.name) || [];
                     if (groups.includes('pit-crew')) {
-                        setIsMobileMode(true);
-                        setLoading(false);
-                        return; // Exit early for mobile users
+                        console.log('[App] User is in pit-crew group -> Mobile Mode');
+                        isMobile = true;
                     }
                 }
             } catch (error) {
                 console.warn('Failed to fetch user groups:', error);
+            }
+
+            // 2. Device Detection (fallback if not pit-crew)
+            if (!isMobile) {
+                // Allow ?mobile=1 URL param for testing
+                const urlParams = new URLSearchParams(window.location.search);
+                if (urlParams.get('mobile') === '1') {
+                    console.log('[App] Mobile mode forced via URL param');
+                    isMobile = true;
+                } else {
+                    const signals = {
+                        narrowScreen: window.innerWidth < 768,
+                        mobileUA: /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent),
+                        touchDevice: ('ontouchstart' in window) || (navigator.maxTouchPoints > 0),
+                        mobilePlatform: /Android|iOS|iPhone|iPad|iPod/i.test(navigator.platform || '')
+                    };
+                    const trueCount = Object.values(signals).filter(Boolean).length;
+                    // Threshold: 1 signal = narrow screen alone is enough (DevTools friendly)
+                    if (trueCount >= 1) {
+                        console.log('[App] Mobile device detected via signals:', signals);
+                        isMobile = true;
+                    }
+                }
+            }
+
+            if (isMobile) {
+                // Fetch saved appMode for mobile users (they skip mode selection)
+                try {
+                    const savedMode = await invoke('getAppMode');
+                    if (savedMode) {
+                        setAppMode(savedMode);
+                        console.log('[App] Mobile user loaded appMode:', savedMode);
+                    } else {
+                        // Default to DEMO if no mode saved yet
+                        setAppMode('DEMO');
+                        console.log('[App] Mobile user defaulting to DEMO mode');
+                    }
+                } catch (err) {
+                    console.warn('[App] Failed to fetch appMode for mobile:', err);
+                    setAppMode('DEMO'); // Fallback
+                }
+                setIsMobileMode(true);
+                setLoading(false);
+                return; // Exit early for mobile users
             }
 
             // 2. Check Onboarding Status
@@ -88,9 +202,39 @@ const App = () => {
         return <div style={{ padding: 40, textAlign: 'center', color: '#00B8D9' }}>Initializing PitLane Ledger...</div>;
     }
 
-    // 1. Mobile Mode (Priority)
+    // 1. Mobile Mode (Priority) - Scanner-First Flow
     if (isMobileMode) {
-        return <MobileControls />;
+        const handleSmartReturn = () => {
+            if (window.innerWidth < 768) {
+                alert('Your screen is still in mobile size. Widen your browser to access the full Dashboard.');
+            } else {
+                setIsMobileMode(false);
+                setMobilePartKey(null);
+            }
+        };
+
+        // If a part has been scanned, show PartDetails for that part
+        if (mobilePartKey) {
+            return (
+                <PartDetails
+                    issueKey={mobilePartKey}
+                    appMode={appMode}
+                    onReturn={() => setMobilePartKey(null)} // Back to scanner
+                    onScanAnother={() => setMobilePartKey(null)} // Back to scanner
+                    isMobileView={true}
+                />
+            );
+        }
+
+        // Default: Show MobileControls with scanner as initial view
+        return (
+            <MobileControls
+                onReturn={handleSmartReturn}
+                appMode={appMode}
+                initialView="scan" // Open scanner by default
+                onScanSwitch={(partKey) => setMobilePartKey(partKey)} // Navigate to PartDetails on scan
+            />
+        );
     }
 
     // 2. Welcome Gate (First Time)

@@ -125,6 +125,11 @@ export const handler = async (event, context) => {
   try {
     // --- CORE TOOLS ---
 
+    // 0. GLOBAL STATE CHECK (Follow The Leader Strategy)
+    const currentAppMode = await storage.get('appMode') || 'DEMO';
+    console.log(`[Handler] Current App Mode: ${currentAppMode}`);
+
+
     if (functionKey === 'rovoTestConnection' || functionKey === 'test-connection') {
       return { status: 'SUCCESS', message: 'Pit Boss is online (Raw Handler Mode). All systems nominal.', timestamp: new Date().toISOString() };
     }
@@ -235,6 +240,12 @@ export const handler = async (event, context) => {
       return { success: true, mode: mode };
     }
 
+    if (functionKey === 'getAppMode') {
+      const mode = await storage.get('appMode') || 'DEMO';
+      console.log('[getAppMode] Retrieved mode:', mode);
+      return mode;
+    }
+
     if (functionKey === 'getDriverNames') {
       const drivers = await storage.get('driverNames');
       return drivers || { car1: 'Car 1', car2: 'Car 2' };
@@ -248,7 +259,17 @@ export const handler = async (event, context) => {
     }
 
     if (functionKey === 'rovoGetInventory' || functionKey === 'get-inventory') {
-      const parts = getMockParts();
+
+      // DUAL-MODE LOGIC: Check 'Follow the Leader' setting
+      let parts = [];
+      if (currentAppMode === 'PROD') {
+        console.log('[rovoGetInventory] Using PROD data from Storage');
+        parts = await storage.get('inventory') || [];
+      } else {
+        console.log('[rovoGetInventory] Using DEMO Mock data');
+        parts = getMockParts();
+      }
+
       const filter = event.filter || (event.payload && event.payload.filter);
       if (filter && typeof filter === 'string') {
         const lowerFilter = filter.toLowerCase();
@@ -381,7 +402,8 @@ export const handler = async (event, context) => {
     }
 
     // DEMO HISTORY - Uses ONLY mock data, never touches storage
-    if (functionKey === 'rovoGetHistory' || functionKey === 'get-history' || functionKey === 'getHistory') {
+    // DUAL-MODE UPDATE: Only execute this block if NOT in PROD mode
+    if ((functionKey === 'rovoGetHistory' || functionKey === 'get-history' || functionKey === 'getHistory') && currentAppMode !== 'PROD') {
       const query = event.query ||
         (event.payload && event.payload.query) ||
         (event.call && event.call.payload && event.call.payload.query);
@@ -442,8 +464,8 @@ export const handler = async (event, context) => {
     }
 
     // PRODUCTION HISTORY - Uses ONLY storage data, NO fallbacks
-    // PRODUCTION HISTORY - Uses ONLY storage data, NO fallbacks
-    if (functionKey === 'getProductionHistory') {
+    // DUAL-MODE UPDATE: Accepts Rovo calls when in PROD mode
+    if (functionKey === 'getProductionHistory' || ((functionKey === 'rovoGetHistory' || functionKey === 'get-history') && currentAppMode === 'PROD')) {
       try {
         const query = event.query ||
           (event.payload && event.payload.query) ||
@@ -727,6 +749,28 @@ export const handler = async (event, context) => {
     // --- PHASE 5: OPS & ANALYTICS ---
 
     if (functionKey === 'rovoPredictFailure' || functionKey === 'predict-failure') {
+      if (currentAppMode === 'PROD') {
+        // Real Predictive Logic based on actual telemetry
+        const query = event.query || (event.payload && event.payload.query);
+        const inventory = await storage.get('inventory') || [];
+        const part = inventory.find(p => p.key === query || p.name === query);
+
+        if (!part) return { error: 'Part not found for analysis' };
+
+        // Calculate risk
+        const life = parseInt(part.life) || 100;
+        let riskLevel = 'LOW';
+        let probability = '5%';
+
+        if (life < 40) { riskLevel = 'HIGH'; probability = '85%'; }
+        else if (life < 70) { riskLevel = 'MEDIUM'; probability = '45%'; }
+
+        return {
+          probability,
+          riskLevel,
+          recommendation: riskLevel === 'HIGH' ? 'Immediate replacement recommended' : 'Continue monitoring telemetry'
+        };
+      }
       return { probability: '12%', riskLevel: 'LOW', recommendation: 'Continue monitoring.' };
     }
 

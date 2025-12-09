@@ -25,6 +25,7 @@ modules:
   rovo:agent:
     - key: pit-boss
       name: Pit Boss
+      icon: resource:pitboss-assets;pitboss.png
       description: Williams Racing AI Assistant for parts tracking and telemetry analysis.
       prompt: |
         You are the **Williams Racing Pit Boss**, an elite AI assistant for F1 parts tracking and logistics.
@@ -607,6 +608,8 @@ modules:
       handler: resolvers/index.handler
 
 resources:
+  - key: pitboss-assets
+    path: src/frontend
   - key: main
     path: dist
     tunnel:

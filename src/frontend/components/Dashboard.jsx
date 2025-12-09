@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { invoke } from '@forge/bridge';
-import { Search, Activity, AlertTriangle, CheckCircle, Package, Truck, RefreshCw, X, Clock, ArrowRight, Settings, RotateCcw, Flag, Factory, Plane, Car, Users, Layers } from 'lucide-react';
+import { Search, Activity, AlertTriangle, CheckCircle, Package, Truck, RefreshCw, X, Clock, ArrowRight, Settings, RotateCcw, Flag, Factory, Plane, Car, Users, Layers, TrendingUp } from 'lucide-react';
 import PartDetails from './PartDetails';
 import SettingsPanel from './SettingsPanel';
 import CarConfigurator from './CarConfigurator';
@@ -32,10 +32,12 @@ const Dashboard = ({ appMode }) => {
         fetchData();
     }, []);
 
-    // Polling for "Live" updates (every 5 seconds)
+    // Polling for "Live" updates (every 5 seconds) - SMART POLLING
     useEffect(() => {
         const interval = setInterval(() => {
-            fetchData(true); // Silent update
+            if (document.visibilityState === 'visible') {
+                fetchData(true); // Silent update only if tab is visible
+            }
         }, 5000);
         return () => clearInterval(interval);
     }, []);
@@ -215,50 +217,67 @@ const Dashboard = ({ appMode }) => {
     return (
         <div style={styles.container}>
             <header style={styles.header}>
-                <div style={styles.logoArea}>
+                <div style={styles.headerLeft}>
                     <img src={logo} alt="Williams Racing" style={styles.logo} />
-                    <div style={{ flex: 1 }}>
-                        <h1 style={styles.title}>Race Operations (Live)</h1>
-                        <p style={styles.subtitle}>Global Parts Overview • Williams Racing</p>
+                    <div style={styles.titling}>
+                        <div style={styles.topRow}>
+                            <h1 style={styles.title}>Race Operations</h1>
+                            <div style={styles.liveIndicator}>
+                                <div style={styles.pulseDot}></div>
+                                LIVE
+                            </div>
+                        </div>
+
+                        <div style={styles.controlsRow}>
+                            {/* Segmented Control for Filters - WRAPPED IN GLASS PILL */}
+                            <div style={styles.glassPill}>
+                                <nav aria-label="Fleet view" style={{ ...styles.segmentedControl, background: 'transparent', border: 'none' }}>
+                                    <button
+                                        onClick={() => setActiveFilterChassis('ALL')}
+                                        style={activeFilterChassis === 'ALL' ? styles.segmentBtnActive : styles.segmentBtn}
+                                    >
+                                        All Fleet
+                                    </button>
+                                    <div style={styles.segmentDivider} />
+                                    <button
+                                        onClick={() => setActiveFilterChassis('CAR1')}
+                                        style={activeFilterChassis === 'CAR1' ? styles.segmentBtnActive : styles.segmentBtn}
+                                    >
+                                        <span style={{ color: driverNames.car1 ? '#00A0E3' : 'inherit' }}>Car 1</span>
+                                    </button>
+                                    <div style={styles.segmentDivider} />
+                                    <button
+                                        onClick={() => setActiveFilterChassis('CAR2')}
+                                        style={activeFilterChassis === 'CAR2' ? styles.segmentBtnActive : styles.segmentBtn}
+                                    >
+                                        <span style={{ color: driverNames.car2 ? '#22D3EE' : 'inherit' }}>Car 2</span>
+                                    </button>
+                                    <div style={styles.segmentDivider} />
+                                    <button
+                                        onClick={() => setActiveFilterChassis('SPARES')}
+                                        style={activeFilterChassis === 'SPARES' ? styles.segmentBtnActive : styles.segmentBtn}
+                                    >
+                                        Spares
+                                    </button>
+                                </nav>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
-                {/* CHASSIS FILTER BAR */}
-                <div style={styles.filterBar}>
-                    <button
-                        style={activeFilterChassis === 'ALL' ? styles.filterBtnActive : styles.filterBtn}
-                        onClick={() => setActiveFilterChassis('ALL')}
-                    >
-                        <Layers size={14} /> All Fleet
-                    </button>
-                    <button
-                        style={activeFilterChassis === 'CAR1' ? styles.filterBtnActive : styles.filterBtn}
-                        onClick={() => setActiveFilterChassis('CAR1')}
-                    >
-                        <Car size={14} color="#0066CA" /> Car 1 ({driverNames.car1})
-                    </button>
-                    <button
-                        style={activeFilterChassis === 'CAR2' ? styles.filterBtnActive : styles.filterBtn}
-                        onClick={() => setActiveFilterChassis('CAR2')}
-                    >
-                        <Car size={14} color="#F59E0B" /> Car 2 ({driverNames.car2})
-                    </button>
-                    <button
-                        style={activeFilterChassis === 'SPARES' ? styles.filterBtnActive : styles.filterBtn}
-                        onClick={() => setActiveFilterChassis('SPARES')}
-                    >
-                        <Package size={14} /> Spares
-                    </button>
-                </div>
+                <div style={styles.headerRight}>
+                    {/* Simplified Header Right - No Glass Pill or Sparkline */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
 
-                <div style={styles.readinessContainer}>
-                    <div style={styles.readinessBadge}>
-                        <div style={styles.readinessLabel}>FLEET READINESS</div>
-                        <div style={styles.readinessValue}>{weightedReadiness}%</div>
+                        <div style={styles.statGroup}>
+                            <span style={styles.statLabel}>FLEET READINESS</span>
+                            <div style={styles.statValue}>{weightedReadiness}%</div>
+                        </div>
+                        <div style={styles.divider} />
+                        <button onClick={() => setShowSettings(true)} style={styles.iconBtn} aria-label="Settings">
+                            <Settings size={20} strokeWidth={1.5} />
+                        </button>
                     </div>
-                    <button onClick={() => setShowSettings(true)} style={styles.settingsBtn} title="Settings">
-                        <Settings size={18} />
-                    </button>
                 </div>
             </header>
 
@@ -343,11 +362,12 @@ const Dashboard = ({ appMode }) => {
                                 <table style={styles.table}>
                                     <thead>
                                         <tr>
-                                            <th style={styles.th}>Part Name</th>
+                                            <th style={styles.th}>Name</th>
                                             <th style={styles.th}>Assignment</th>
                                             <th style={styles.th}>Key</th>
                                             <th style={styles.th}>Status</th>
-                                            <th style={styles.th}>Life</th>
+                                            <th style={styles.th}>Est. Life</th>
+
                                             <th style={styles.th}></th>
                                         </tr>
                                     </thead>
@@ -385,6 +405,7 @@ const Dashboard = ({ appMode }) => {
                                                             </span>
                                                         )}
                                                     </td>
+
                                                     <td style={styles.td}>
                                                         <ArrowRight size={16} color="var(--color-accent-cyan)" />
                                                     </td>
@@ -434,41 +455,48 @@ const Dashboard = ({ appMode }) => {
                 </div>
             </div>
 
-            {selectedPart && (
-                <div style={styles.drawerOverlay} onClick={() => setSelectedPart(null)}>
-                    <div style={styles.drawer} onClick={e => e.stopPropagation()}>
-                        <button style={styles.closeButton} onClick={() => setSelectedPart(null)}>
-                            <X size={24} />
-                        </button>
-                        <PartDetails
-                            key={selectedPart.id}
-                            issueId={selectedPart.id}
-                            issueKey={selectedPart.key}
-                        />
+            {
+                selectedPart && (
+                    <div style={styles.drawerOverlay} onClick={() => setSelectedPart(null)}>
+                        <div style={styles.drawer} onClick={e => e.stopPropagation()}>
+                            <button style={styles.closeButton} onClick={() => setSelectedPart(null)}>
+                                <X size={24} />
+                            </button>
+                            <PartDetails
+                                key={selectedPart.id}
+                                issueId={selectedPart.id}
+                                issueKey={selectedPart.key}
+                                appMode={appMode}
+                            />
+                        </div>
                     </div>
-                </div>
-            )}
+                )
+            }
 
-            {showCalendarSettings && (
-                <RaceCalendarSettings
-                    onClose={() => setShowCalendarSettings(false)}
-                    onSave={(newCalendar) => setRaceCalendar(newCalendar)}
-                    initialRaces={raceCalendar}
-                />
-            )}
+            {
+                showCalendarSettings && (
+                    <RaceCalendarSettings
+                        onClose={() => setShowCalendarSettings(false)}
+                        onSave={(newCalendar) => setRaceCalendar(newCalendar)}
+                        initialRaces={raceCalendar}
+                    />
+                )
+            }
 
-            {showSettings && (
-                <SettingsPanel
-                    onClose={() => setShowSettings(false)}
-                    currentDriverNames={driverNames}
-                    appMode={appMode}
-                    onDriverNamesUpdated={(newNames) => {
-                        setDriverNames(newNames);
-                        setShowSettings(false);
-                        fetchData(); // Reload to refresh dashboard with new names
-                    }}
-                />
-            )}
+            {
+                showSettings && (
+                    <SettingsPanel
+                        onClose={() => setShowSettings(false)}
+                        currentDriverNames={driverNames}
+                        appMode={appMode}
+                        onDriverNamesUpdated={(newNames) => {
+                            setDriverNames(newNames);
+                            setShowSettings(false);
+                            fetchData(); // Reload to refresh dashboard with new names
+                        }}
+                    />
+                )
+            }
         </div >
     );
 };
@@ -492,6 +520,44 @@ const StatCard = ({ title, value, icon, color, sub, isCritical }) => (
     </div>
 );
 
+const ReadinessSparkline = ({ readiness }) => {
+    // Generate simple 5-point trend based on current readiness
+    // 100 -> 98 -> 95 -> 96 -> Current
+    // This simulates a "Season Start" baseline drifting to current state
+    const points = [100, 98, 95, 92, readiness];
+    const max = 100;
+    const min = 80; // Scale focus
+
+    // Normalize points to SVG viewBox (50x20)
+    const normalizeY = (val) => 20 - ((val - min) / (max - min)) * 20;
+    const polylineMap = points.map((p, i) => `${i * 12.5},${normalizeY(p)}`).join(' ');
+
+    const isPositive = readiness >= 90;
+    const color = isPositive ? '#00D084' : '#F59E0B';
+
+    return (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '2px' }}>
+            <svg width="50" height="20" viewBox="0 0 50 20" style={{ overflow: 'visible' }}>
+                {/* Trend Line */}
+                <polyline
+                    points={polylineMap}
+                    fill="none"
+                    stroke={color}
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                />
+                {/* End Dot */}
+                <circle cx="50" cy={normalizeY(readiness)} r="3" fill={color} />
+            </svg>
+            <div style={{ fontSize: '10px', color: color, fontWeight: 700, display: 'flex', alignItems: 'center', gap: '2px' }}>
+                {isPositive ? <TrendingUp size={10} /> : <Activity size={10} />}
+                {readiness >= 95 ? '> Target' : 'Stable'}
+            </div>
+        </div>
+    );
+};
+
 const getStatusStyle = (status) => {
     const base = { padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 600, display: 'inline-block' };
     if (status.includes('Trackside')) return { ...base, background: 'rgba(0, 208, 132, 0.15)', color: '#00D084' };
@@ -504,36 +570,42 @@ const getStatusStyle = (status) => {
 const getAssignmentStyle = (assignment) => {
     const base = { padding: '2px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 600, display: 'inline-flex', alignItems: 'center', gap: '4px', border: '1px solid transparent' };
     if (assignment && assignment.includes('Car 1')) return { ...base, background: 'rgba(0, 102, 202, 0.15)', color: 'var(--color-accent-blue)', borderColor: 'rgba(0, 102, 202, 0.3)' };
-    if (assignment && assignment.includes('Car 2')) return { ...base, background: 'rgba(245, 158, 11, 0.15)', color: 'var(--color-warning)', borderColor: 'rgba(245, 158, 11, 0.3)' };
+    if (assignment && assignment.includes('Car 2')) return { ...base, background: 'rgba(34, 211, 238, 0.15)', color: '#22D3EE', borderColor: 'rgba(34, 211, 238, 0.3)' };
     return { ...base, background: 'rgba(148, 163, 184, 0.1)', color: 'var(--color-text-muted)', borderColor: 'rgba(148, 163, 184, 0.2)' };
 };
 
 const styles = {
-    container: { padding: '40px', maxWidth: '1400px', margin: '0 auto', fontFamily: 'var(--font-sans)', color: 'var(--color-text-primary)' },
-    header: { marginBottom: '40px', display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end' },
-    logoArea: { display: 'flex', alignItems: 'center', gap: '20px' },
-    logo: { height: '52px', width: 'auto', objectFit: 'contain', filter: 'drop-shadow(0 2px 8px rgba(0, 184, 217, 0.3))' },
-    title: { fontSize: '36px', fontWeight: 700, marginBottom: '4px', background: 'linear-gradient(90deg, #fff, #00A0E3)', WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' },
-    subtitle: { color: 'var(--color-text-secondary)', fontSize: '16px' },
-    settingsBtn: {
-        background: 'rgba(0, 184, 217, 0.1)',
-        border: '1px solid rgba(0, 184, 217, 0.3)',
-        borderRadius: '8px',
-        padding: '10px',
-        color: '#00B8D9',
-        cursor: 'pointer',
-        transition: 'all 0.2s',
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center'
-    },
-    filterBar: { display: 'flex', gap: '8px', background: '#151B2E', padding: '6px', borderRadius: '8px', border: '1px solid var(--color-border-subtle)' },
-    filterBtn: { display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', background: 'transparent', border: 'none', color: '#94A3B8', fontSize: '13px', fontWeight: 500, cursor: 'pointer', borderRadius: '6px', transition: 'all 0.2s' },
-    filterBtnActive: { display: 'flex', alignItems: 'center', gap: '6px', padding: '8px 16px', background: 'rgba(0, 184, 217, 0.1)', color: '#00B8D9', border: 'none', fontSize: '13px', fontWeight: 600, cursor: 'pointer', borderRadius: '6px' },
-    readinessContainer: { display: 'flex', alignItems: 'center' },
-    readinessBadge: { textAlign: 'right' },
-    readinessLabel: { fontSize: '12px', color: 'var(--color-text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em', marginBottom: '4px' },
-    readinessValue: { fontSize: '48px', fontWeight: '700', color: '#00D084', lineHeight: 1, textShadow: '0 0 20px rgba(0, 208, 132, 0.3)' },
+    container: { padding: '32px 16px', maxWidth: '90%', margin: '0 auto', fontFamily: 'var(--font-sans)', color: 'var(--color-text-primary)', zoom: 1.35 },
+
+    // Header Styles - Floating Glass Islands
+    header: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '32px', padding: '0 8px' },
+    glassPill: { background: 'rgba(21, 27, 46, 0.6)', padding: '4px 8px', borderRadius: '12px', backdropFilter: 'blur(10px)', border: '1px solid rgba(255,255,255,0.05)', display: 'flex', alignItems: 'center', boxShadow: '0 4px 6px rgba(0,0,0,0.1)' },
+
+    headerLeft: { display: 'flex', alignItems: 'center', gap: '24px' },
+    headerRight: { display: 'flex', alignItems: 'center', gap: '24px' },
+    logo: { height: '48px', width: 'auto' },
+    titling: { display: 'flex', flexDirection: 'column', gap: '6px' },
+    topRow: { display: 'flex', alignItems: 'center', gap: '12px' },
+    title: { fontSize: '24px', fontWeight: 700, color: 'white', letterSpacing: '-0.02em', margin: 0 },
+
+    // Segmented Control
+    segmentedControl: { display: 'inline-flex', alignItems: 'center', background: 'rgba(0,0,0,0.2)', borderRadius: '8px', padding: '4px', border: '1px solid rgba(255,255,255,0.05)' },
+    segmentBtn: { background: 'transparent', border: 'none', color: '#94A3B8', padding: '6px 16px', fontSize: '13px', fontWeight: 500, cursor: 'pointer', borderRadius: '6px', transition: 'all 0.2s' },
+    segmentBtnActive: { background: 'rgba(255,255,255,0.1)', border: 'none', color: 'white', padding: '6px 16px', fontSize: '13px', fontWeight: 600, cursor: 'default', borderRadius: '6px', boxShadow: '0 2px 4px rgba(0,0,0,0.1)' },
+    segmentDivider: { width: '1px', height: '12px', background: 'rgba(255,255,255,0.1)' },
+
+    // Indicators
+    liveIndicator: { display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 700, color: '#00D084', background: 'rgba(0, 208, 132, 0.1)', padding: '2px 8px', borderRadius: '12px', border: '1px solid rgba(0, 208, 132, 0.2)' },
+    pulseDot: { width: '6px', height: '6px', background: '#00D084', borderRadius: '50%', boxShadow: '0 0 8px #00D084' },
+
+    // Stats
+    statGroup: { textAlign: 'right' },
+    statLabel: { display: 'block', fontSize: '11px', fontWeight: 600, color: '#64748B', letterSpacing: '0.05em', marginBottom: '2px' },
+    statValue: { fontSize: '24px', fontWeight: 700, color: '#00B8D9', lineHeight: 1, textShadow: '0 0 20px rgba(0, 184, 217, 0.2)' },
+
+    iconBtn: { background: 'transparent', border: 'none', color: '#94A3B8', cursor: 'pointer', padding: '8px', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'all 0.2s', ':hover': { background: 'rgba(255,255,255,0.1)', color: 'white' } },
+    divider: { width: '1px', height: '32px', background: 'rgba(255,255,255,0.1)' },
+
     resetBtn: { marginLeft: '20px', background: 'rgba(239, 68, 68, 0.15)', border: '1px solid rgba(239, 68, 68, 0.3)', borderRadius: '6px', padding: '8px', color: '#F04438', cursor: 'pointer' },
     grid: { display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))', gap: '24px', marginBottom: '32px' },
     card: { background: '#151B2E', border: '1px solid var(--color-border-subtle)', borderRadius: '16px', padding: '24px', boxShadow: 'var(--shadow-soft)' },

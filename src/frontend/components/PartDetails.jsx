@@ -7,7 +7,7 @@ import LogEventModal from './LogEventModal';
 import QRCodePanel from './QRCodePanel';
 import MobileControls from './MobileControls';
 
-const PartDetails = ({ issueId, issueKey, onClose }) => {
+const PartDetails = ({ issueId, issueKey, onClose, appMode, onReturn, onScanAnother, isMobileView }) => {
     const [history, setHistory] = useState(null);
     const [loading, setLoading] = useState(true);
     const [allParts, setAllParts] = useState([]);
@@ -23,6 +23,9 @@ const PartDetails = ({ issueId, issueKey, onClose }) => {
     const [showLogModal, setShowLogModal] = useState(false);
     const [showQRPanel, setShowQRPanel] = useState(false);
     const [isMobileMode, setIsMobileMode] = useState(false);
+    const [mobileInitialView, setMobileInitialView] = useState(null);
+    const [showQRScanner, setShowQRScanner] = useState(false); // QR scanner modal
+    const [pressTimer, setPressTimer] = useState(null); // Long press timer
 
     // Only fetch data when issueId/issueKey ACTUALLY change (not just re-render)
     useEffect(() => {
@@ -53,9 +56,8 @@ const PartDetails = ({ issueId, issueKey, onClose }) => {
             try {
                 const query = issueKey || issueId;
 
-                // Check if production data exists, otherwise use demo
-                const prodStatus = await invoke('getProductionStatus');
-                const useProduction = prodStatus?.hasData || false;
+                // STRICT MODE LOGIC: Trust the appMode prop
+                const useProduction = appMode === 'PROD';
 
                 // Use SEPARATE resolvers for demo vs prod
                 const partsResolver = useProduction ? 'getProductionParts' : 'getDemoParts';
@@ -106,8 +108,7 @@ const PartDetails = ({ issueId, issueKey, onClose }) => {
             setLoading(true);
             try {
                 const query = partKey || partId;
-                const prodStatus = await invoke('getProductionStatus');
-                const useProduction = prodStatus?.hasData || false;
+                const useProduction = appMode === 'PROD';
                 const historyResolver = useProduction ? 'getProductionHistory' : 'getHistory';
 
                 console.log('[PartDetails] Calling', historyResolver, 'with query:', query);
@@ -224,15 +225,39 @@ const PartDetails = ({ issueId, issueKey, onClose }) => {
 
                     <div style={styles.dividerVertical} />
 
-                    <div style={styles.iconGroup}>
-                        <button onClick={() => setShowQRPanel(true)} style={styles.actionButtonSecondary} title="QR Code">
+                    {/* Mobile View: Show Scan Another button */}
+                    {isMobileView && onScanAnother && (
+                        <button
+                            onClick={onScanAnother}
+                            style={{ ...styles.actionButton, background: 'rgba(0, 184, 217, 0.15)', borderColor: '#00B8D9' }}
+                            title="Scan Another Part"
+                        >
                             <QrCode size={16} />
+                            <span>Scan Another</span>
                         </button>
+                    )}
 
-                        <button onClick={() => setIsMobileMode(true)} style={styles.actionButtonSecondary} title="Pit Crew">
-                            <Smartphone size={16} />
-                        </button>
-                    </div>
+                    {/* Desktop View: Show QR and Mobile buttons */}
+                    {!isMobileView && (
+                        <div style={styles.iconGroup}>
+                            <button
+                                onClick={() => { setMobileInitialView('scan'); setIsMobileMode(true); }}
+                                style={styles.actionButtonSecondary}
+                                title="Scan QR Code"
+                            >
+                                <QrCode size={16} />
+                                <span style={{ marginLeft: '6px', fontSize: '12px' }}>Scan QR</span>
+                            </button>
+
+                            <button
+                                onClick={() => { setMobileInitialView('scan'); setIsMobileMode(true); }}
+                                style={styles.actionButtonSecondary}
+                                title="Pit Crew Mobile"
+                            >
+                                <Smartphone size={16} />
+                            </button>
+                        </div>
+                    )}
                 </div>
             </div>
         </div>
@@ -241,9 +266,28 @@ const PartDetails = ({ issueId, issueKey, onClose }) => {
     if (isMobileMode) {
         return (
             <MobileControls
-                issueId={issueKey || issueId}
+                issueId={currentPartKey || currentPartId || issueKey || issueId}
                 onReturn={() => setIsMobileMode(false)}
                 onEventLogged={handleMobileEventLogged}
+                appMode={appMode}
+                initialView={mobileInitialView}
+                onScanSwitch={(scannedKey) => {
+                    const part = allParts.find(p => p.key === scannedKey);
+                    if (part) {
+                        handlePartChange(part.id, part.key);
+                    } else {
+                        // If not found, it might be a new part the user wants to add.
+                        // But let MobileControls handle the "not found" case or "add new" case?
+                        // Actually, MobileControls scanner logic will decide. 
+                        // If it calls onScanSwitch, it means it wants to switch.
+                        // If we return false or error, MobileControls can show "Add Part" modal.
+                        console.warn('Part not found:', scannedKey);
+                        // We can't easily return value to MobileControls here if it's async.
+                        // But MobileControls has access to invoke('addPart') so it can handle new parts itself.
+                        // Here we just handle switching to EXISTING parts.
+                    }
+                }}
+                allParts={allParts} // Pass inventory for local lookup in MobileControls
             />
         );
     }
@@ -299,6 +343,7 @@ const PartDetails = ({ issueId, issueKey, onClose }) => {
                 onClose={() => setShowLogModal(false)}
                 onSubmit={handleLogEvent}
                 issueId={issueKey || issueId}
+                currentStatus={allParts.find(p => p.key === currentPartKey)?.pitlaneStatus}
             />
 
             <QRCodePanel

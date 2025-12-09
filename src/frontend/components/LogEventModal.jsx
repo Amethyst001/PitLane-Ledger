@@ -7,13 +7,41 @@ const STATUS_PRESETS = [
     { value: '📦 Packaged', label: '📦 Packaged' },
     { value: '✈️ Shipped', label: '✈️ Shipped' },
     { value: '🏁 Trackside', label: '🏁 Trackside' },
+    { value: '✅ Cleared for Race', label: '✅ Cleared for Race' },
     { value: '⚠️ DAMAGED', label: '⚠️ DAMAGED' },
     { value: '🔧 Maintenance', label: '🔧 Maintenance' },
     { value: '🚚 In Transit', label: '🚚 In Transit' }
 ];
 
-const LogEventModal = ({ isOpen, onClose, onSubmit, issueId, issueKey, partName }) => {
-    const [status, setStatus] = useState(STATUS_PRESETS[0].value);
+const LogEventModal = ({ isOpen, onClose, onSubmit, issueId, issueKey, partName, currentStatus }) => {
+    // Smart default logic
+    const getNextStatus = (current) => {
+        if (!current) return STATUS_PRESETS[0].value;
+        const map = {
+            'Factory': '🏭 Manufactured',
+            '🏭 Manufactured': '✅ Quality Checked',
+            '✅ Quality Checked': '📦 Packaged',
+            '📦 Packaged': '✈️ Shipped',
+            '✈️ Shipped': '🚚 In Transit',
+            '🚚 In Transit': '🏁 Trackside',
+            '🏁 Trackside': '✅ Cleared for Race',
+            '✅ Cleared for Race': '🏁 Trackside', // Cycle back or go to maintenance logic handled by user choice usually
+            '⚠️ DAMAGED': '🔧 Maintenance',
+            '🔧 Maintenance': '✅ Quality Checked'
+        };
+        // Normalize input by removing emojis if present in stored data vs preset data
+        // For simplicity, we assume robust matching or fall back to first
+        return map[current] || STATUS_PRESETS[0].value;
+    };
+
+    const [status, setStatus] = useState(getNextStatus(currentStatus));
+
+    // Update status when modal opens or currentStatus changes
+    React.useEffect(() => {
+        if (isOpen) {
+            setStatus(getNextStatus(currentStatus));
+        }
+    }, [isOpen, currentStatus]);
     const [note, setNote] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
 
