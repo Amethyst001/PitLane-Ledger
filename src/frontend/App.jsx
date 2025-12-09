@@ -18,6 +18,7 @@ const App = () => {
     const [loading, setLoading] = useState(true);
     const [appMode, setAppMode] = useState(null); // 'DEMO' or 'PROD' - purely in React state
     const [mobilePartKey, setMobilePartKey] = useState(null); // Part key selected in mobile scanner
+    const [refreshTrigger, setRefreshTrigger] = useState(0); // Increment to trigger system-wide refresh
 
     // Dynamic Scaling: Calculate ideal zoom based on viewport
     useEffect(() => {
@@ -39,6 +40,49 @@ const App = () => {
         return () => window.removeEventListener('resize', calculateScale);
     }, []);
 
+    // Global Keyboard Shortcuts
+    useEffect(() => {
+        const handleKeyDown = (e) => {
+            // Escape - Close modal / Go back
+            if (e.key === 'Escape') {
+                // Dispatch custom event that modals can listen to
+                window.dispatchEvent(new CustomEvent('pitlane:escape'));
+                // If in mobile part view, go back
+                if (mobilePartKey) {
+                    setMobilePartKey(null);
+                }
+            }
+
+            // Ctrl+F or Cmd+F - Focus search
+            if ((e.ctrlKey || e.metaKey) && e.key === 'f') {
+                e.preventDefault();
+                window.dispatchEvent(new CustomEvent('pitlane:focus-search'));
+            }
+
+            // Ctrl+N or Cmd+N - Add new part
+            if ((e.ctrlKey || e.metaKey) && e.key === 'n') {
+                e.preventDefault();
+                window.dispatchEvent(new CustomEvent('pitlane:add-part'));
+            }
+
+            // Ctrl+L or Cmd+L - Log event
+            if ((e.ctrlKey || e.metaKey) && e.key === 'l') {
+                e.preventDefault();
+                window.dispatchEvent(new CustomEvent('pitlane:log-event'));
+            }
+
+            // Ctrl+1,2,3,4 - Stat filters
+            if ((e.ctrlKey || e.metaKey) && ['1', '2', '3', '4'].includes(e.key)) {
+                e.preventDefault();
+                const filterMap = { '1': 'ALL', '2': 'TRACKSIDE', '3': 'TRANSIT', '4': 'CRITICAL' };
+                window.dispatchEvent(new CustomEvent('pitlane:filter', { detail: filterMap[e.key] }));
+            }
+        };
+
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [mobilePartKey]);
+
     // Auto View Switching: Smart toggle between mobile/desktop based on viewport
     useEffect(() => {
         let debounceTimer = null;
@@ -52,10 +96,12 @@ const App = () => {
                 mobileUA: /Android|iPhone|iPad|iPod|webOS|BlackBerry/i.test(navigator.userAgent),
                 portraitMode: window.innerHeight > window.innerWidth
             };
-            // Count strong mobile signals
-            const strongSignals = [signals.narrowWidth, signals.mobileUA].filter(Boolean).length;
+            // More conservative: ONLY trigger mobile if:
+            // 1. Screen is narrow (< 900px), OR
+            // 2. Has mobile UA string (actual phone/tablet)
+            // Touch alone is NOT enough (many laptops have touch)
             return {
-                shouldBeMobile: signals.narrowWidth || (strongSignals >= 1 && signals.touchDevice),
+                shouldBeMobile: signals.narrowWidth || signals.mobileUA,
                 signals
             };
         };
@@ -117,14 +163,12 @@ const App = () => {
                     isMobile = true;
                 } else {
                     const signals = {
-                        narrowScreen: window.innerWidth < 768,
-                        mobileUA: /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent),
-                        touchDevice: ('ontouchstart' in window) || (navigator.maxTouchPoints > 0),
-                        mobilePlatform: /Android|iOS|iPhone|iPad|iPod/i.test(navigator.platform || '')
+                        narrowScreen: window.innerWidth < 900,
+                        mobileUA: /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini/i.test(navigator.userAgent)
                     };
-                    const trueCount = Object.values(signals).filter(Boolean).length;
-                    // Threshold: 1 signal = narrow screen alone is enough (DevTools friendly)
-                    if (trueCount >= 1) {
+                    // More conservative: ONLY narrowScreen OR mobileUA
+                    // Touch alone is NOT enough (many desktops have touchscreens)
+                    if (signals.narrowScreen || signals.mobileUA) {
                         console.log('[App] Mobile device detected via signals:', signals);
                         isMobile = true;
                     }
@@ -264,7 +308,13 @@ const App = () => {
     const moduleKey = context?.moduleKey;
 
     if (moduleKey === 'pitlane-dashboard') {
-        return <Dashboard appMode={appMode} />;
+        return (
+            <Dashboard
+                appMode={appMode}
+                refreshTrigger={refreshTrigger}
+                onEventLogged={() => setRefreshTrigger(prev => prev + 1)}
+            />
+        );
     }
 
     // Default to Issue Panel

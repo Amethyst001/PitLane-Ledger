@@ -1,6 +1,6 @@
 import React, { useState, useRef } from 'react';
 import { invoke } from '@forge/bridge';
-import { Download, Link, Printer, Users, ArrowLeft, ArrowRight } from 'lucide-react';
+import { Download, Link, Printer, Users, ArrowLeft, ArrowRight, Check } from 'lucide-react';
 import Toast from './Toast';
 
 const OnboardingGuide = ({ onBack, onComplete }) => {

@@ -1,7 +1,7 @@
 import React from 'react';
 import { AlertTriangle, Calendar, Wrench } from 'lucide-react';
 
-const PredictiveTimeline = ({ parts, calendar = [], onOpenSettings }) => {
+const PredictiveTimeline = ({ parts, calendar = [], onOpenSettings, onPartClick }) => {
     // Process calendar data: calculate daysAway if missing, and sort
     const upcomingRaces = React.useMemo(() => {
         if (!Array.isArray(calendar) || calendar.length === 0) return [];
@@ -13,15 +13,28 @@ const PredictiveTimeline = ({ parts, calendar = [], onOpenSettings }) => {
             const today = new Date();
             today.setHours(0, 0, 0, 0);
             date.setHours(0, 0, 0, 0);
-            const daysAway = Math.ceil((date - today) / (1000 * 60 * 60 * 24));
-            return { ...race, daysAway };
+            const diffTime = date - today;
+            const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
+            return { ...race, daysAway: diffDays };
         })
             .filter(r => r.daysAway >= 0)
             .sort((a, b) => a.daysAway - b.daysAway);
     }, [calendar]);
 
-    const criticalParts = parts.filter(p => p.predictiveStatus === 'CRITICAL' && p.lifeRemaining <= 1);
-    const warningParts = parts.filter(p => p.predictiveStatus === 'WARNING' || p.lifeRemaining === 2);
+    // Critical: CRITICAL status OR lifeRemaining <= 1 OR DAMAGED status
+    const criticalParts = React.useMemo(() =>
+        parts.filter(p =>
+            (p.predictiveStatus === 'CRITICAL' || p.pitlaneStatus?.includes('DAMAGED')) &&
+            p.lifeRemaining <= 2
+        ), [parts]);
+
+    // Warning: WARNING status OR lifeRemaining = 2-3 (not already critical)
+    const warningParts = React.useMemo(() =>
+        parts.filter(p =>
+            !p.pitlaneStatus?.includes('DAMAGED') &&
+            p.predictiveStatus !== 'CRITICAL' &&
+            (p.predictiveStatus === 'WARNING' || (p.lifeRemaining >= 2 && p.lifeRemaining <= 3))
+        ), [parts]);
 
     const nextRaceReadiness = parts.filter(p => p.pitlaneStatus.includes('Trackside')).length;
     const inTransit = parts.filter(p => p.pitlaneStatus.includes('Transit')).length;
@@ -31,6 +44,12 @@ const PredictiveTimeline = ({ parts, calendar = [], onOpenSettings }) => {
 
     const toggleShowMore = () => {
         setVisibleRaces(prev => prev === 3 ? upcomingRaces.length : 3);
+    };
+
+    const handlePartClick = (part) => {
+        if (onPartClick) {
+            onPartClick(part.key);
+        }
     };
 
     return (
@@ -52,7 +71,11 @@ const PredictiveTimeline = ({ parts, calendar = [], onOpenSettings }) => {
                 {criticalParts.length > 0 && (
                     <div style={styles.eolGroup}>
                         {criticalParts.slice(0, visibleEOLCount).map(part => (
-                            <div key={part.id} style={{ ...styles.eolItem, ...styles.criticalEol }}>
+                            <div
+                                key={part.id}
+                                style={{ ...styles.eolItem, ...styles.criticalEol, cursor: onPartClick ? 'pointer' : 'default' }}
+                                onClick={() => handlePartClick(part)}
+                            >
                                 <div style={styles.eolName}>{part.name}</div>
                                 <div style={styles.eolBadge}>🔴 {part.lifeRemaining} {part.lifeRemaining === 1 ? 'race' : 'races'}</div>
                             </div>
@@ -63,7 +86,11 @@ const PredictiveTimeline = ({ parts, calendar = [], onOpenSettings }) => {
                 {warningParts.length > 0 && (
                     <div style={styles.eolGroup}>
                         {warningParts.slice(0, Math.max(0, visibleEOLCount - criticalParts.length)).map(part => (
-                            <div key={part.id} style={{ ...styles.eolItem, ...styles.warningEol }}>
+                            <div
+                                key={part.id}
+                                style={{ ...styles.eolItem, ...styles.warningEol, cursor: onPartClick ? 'pointer' : 'default' }}
+                                onClick={() => handlePartClick(part)}
+                            >
                                 <div style={styles.eolName}>{part.name}</div>
                                 <div style={styles.eolBadgeWarning}>🟠 {part.lifeRemaining} races</div>
                             </div>
@@ -73,7 +100,7 @@ const PredictiveTimeline = ({ parts, calendar = [], onOpenSettings }) => {
 
                 {criticalParts.length === 0 && warningParts.length === 0 && (
                     <div style={styles.allClear}>
-                        ✅ All parts within safe operating window
+                        All parts within safe operating window
                     </div>
                 )}
 

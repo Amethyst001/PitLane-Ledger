@@ -18,7 +18,6 @@ const CarConfigurator = ({ onPartSelect, parts }) => {
         if (!parts || parts.length === 0) return 'OK';
 
         // Filter for parts in this zone, EXCLUDING retired/scrapped
-        // NOTE: 'parts' here is already filtered by Chassis (Car 1/2) if selected in Dashboard
         const zoneParts = parts.filter(part =>
             getZoneForPart(part.name) === zoneName &&
             !['RETIRED', 'SCRAPPED'].includes(part.pitlaneStatus)
@@ -26,23 +25,59 @@ const CarConfigurator = ({ onPartSelect, parts }) => {
 
         if (zoneParts.length === 0) return 'OK';
 
-        // 1. CRITICAL (Red): DAMAGED or Life <= 1 OR Predictive Critical
-        const hasCritical = zoneParts.some(p =>
+        // Separate by assignment: Car parts vs Spares
+        const carParts = zoneParts.filter(p =>
+            p.assignment?.includes('Car 1') || p.assignment?.includes('Car 2')
+        );
+        const spares = zoneParts.filter(p =>
+            p.assignment?.includes('Spare') ||
+            (!p.assignment?.includes('Car 1') && !p.assignment?.includes('Car 2'))
+        );
+
+        // Check if there are HEALTHY spares (trackside/manufactured, not damaged, life > 2)
+        const healthySpares = spares.filter(p =>
+            !p.pitlaneStatus?.includes('DAMAGED') &&
+            p.predictiveStatus !== 'CRITICAL' &&
+            p.lifeRemaining > 2
+        );
+        const hasHealthySpare = healthySpares.length > 0;
+
+        // Check if any Car part is critical
+        const criticalCarParts = carParts.filter(p =>
             p.pitlaneStatus?.includes('DAMAGED') ||
             p.lifeRemaining <= 1 ||
             p.predictiveStatus === 'CRITICAL'
         );
-        if (hasCritical) return 'CRITICAL';
 
-        // 2. WARNING (Orange): IN TRANSIT or Life == 2 or Warning
-        const hasWarning = zoneParts.some(p =>
+        // Check if any Car part is warning level
+        const warningCarParts = carParts.filter(p =>
             p.pitlaneStatus?.includes('Transit') ||
             p.lifeRemaining === 2 ||
             p.predictiveStatus === 'WARNING'
         );
-        if (hasWarning) return 'WARNING';
 
-        // 3. OK (Green)
+        // INTELLIGENT LOGIC:
+        // 1. CRITICAL (Red): Car part is critical AND NO healthy spare available
+        if (criticalCarParts.length > 0 && !hasHealthySpare) {
+            return 'CRITICAL';
+        }
+
+        // 2. WARNING (Orange): Car part is critical BUT has spare OR car part is warning level
+        if (criticalCarParts.length > 0 && hasHealthySpare) {
+            return 'WARNING'; // Covered but needs attention
+        }
+        if (warningCarParts.length > 0) {
+            return 'WARNING';
+        }
+
+        // 3. Also warn if ALL parts in zone are spares and one is critical (no car to swap to)
+        if (carParts.length === 0 && spares.some(p =>
+            p.pitlaneStatus?.includes('DAMAGED') || p.lifeRemaining <= 1
+        )) {
+            return 'WARNING';
+        }
+
+        // 4. OK (Green): Everything is fine
         return 'OK';
     };
 

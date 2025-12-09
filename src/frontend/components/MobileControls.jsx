@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { invoke } from '@forge/bridge';
-import { CheckCircle, AlertTriangle, ArrowLeft, Plus, QrCode, X } from 'lucide-react';
+import { CheckCircle, AlertTriangle, ArrowLeft, Plus, QrCode, X, List } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 import QrScanner from 'qr-scanner'; // Nimiq - primary scanner with WebWorker
 
@@ -10,7 +10,8 @@ const MobileControls = ({ issueId, onReturn, onEventLogged, appMode, initialView
     const [lastAction, setLastAction] = useState('');
     const [showAddPartModal, setShowAddPartModal] = useState(initialView === 'add');
     const [showPrintQRModal, setShowPrintQRModal] = useState(initialView === 'print');
-    const [newPart, setNewPart] = useState({ name: '', key: '', location: 'Garage 1' });
+    const [showPartsListModal, setShowPartsListModal] = useState(false); // Browse parts list
+    const [newPart, setNewPart] = useState({ name: '', key: '', assignment: 'Spares' });
     const [qrPrintStats, setQRPrintStats] = useState({ lastPrint: null, lastCount: 0, currentCount: 0 });
     const [expandedFields, setExpandedFields] = useState(false); // Toggle for extra fields
     const [internalParts, setInternalParts] = useState([]); // Fallback if allParts prop is missing
@@ -41,12 +42,44 @@ const MobileControls = ({ issueId, onReturn, onEventLogged, appMode, initialView
     const handleQuickLog = async (status) => {
         setIsLogging(true);
 
+        // --- WORKFLOW VALIDATION ---
+        // Get current part info for validation
+        const partsList = allParts || internalParts;
+        const currentPart = issueId ? partsList.find(p => p.key === issueId || p.id === issueId) : null;
+        const currentStatus = currentPart?.pitlaneStatus?.toLowerCase() || '';
+
+        // Validate "Clear for Race"
+        if (status.includes('Cleared for Race') || status.includes('Clear for Race')) {
+            // Block if part is damaged
+            if (currentStatus.includes('damage') || currentStatus.includes('quarantine') || currentStatus.includes('repair')) {
+                setScanError('⚠️ Cannot clear a DAMAGED part for race. Please repair first.');
+                setIsLogging(false);
+                return;
+            }
+            // Block if part is not trackside
+            if (!currentStatus.includes('trackside') && !currentStatus.includes('garage') && !currentStatus.includes('ready')) {
+                setScanError(`⚠️ Part is not trackside (Status: ${currentPart?.pitlaneStatus}). Cannot clear for race.`);
+                setIsLogging(false);
+                return;
+            }
+            // Block if already cleared
+            if (currentStatus.includes('cleared') && currentStatus.includes('race')) {
+                setScanError('ℹ️ Part already cleared for race.');
+                setIsLogging(false);
+                return;
+            }
+        }
+
+        // Validate "Log Damage" - warn but allow (can damage any part)
+        // No blocking needed, just proceed
+
         try {
             await invoke('logEvent', {
                 key: 'logEvent',
                 issueId,
                 status,
-                note: `Quick log from pit crew mobile at ${new Date().toLocaleTimeString()}`
+                note: `Quick log from pit crew mobile at ${new Date().toLocaleTimeString()}`,
+                appMode
             });
 
             setLastAction(status);
@@ -56,7 +89,7 @@ const MobileControls = ({ issueId, onReturn, onEventLogged, appMode, initialView
             if (onEventLogged) onEventLogged();
         } catch (error) {
             console.error('Error logging event:', error);
-            alert('Failed to log event');
+            setScanError('Failed to log event. Please try again.');
         } finally {
             setIsLogging(false);
         }
@@ -68,8 +101,8 @@ const MobileControls = ({ issueId, onReturn, onEventLogged, appMode, initialView
         setNewPart(prev => ({ ...prev, key: `PIT-${type}-${random}` }));
     };
 
-    // Default to scanner view unless another modal is explicitly requested
-    const [showScanner, setShowScanner] = useState(initialView !== 'add' && initialView !== 'print');
+    // Scanner defaults to CLOSED - only open when user explicitly requests via Scan QR button
+    const [showScanner, setShowScanner] = useState(initialView === 'scan');
     const [scanResult, setScanResult] = useState(null);
     const [facingMode, setFacingMode] = useState('environment'); // 'environment' (back) or 'user' (front)
     const [torchOn, setTorchOn] = useState(false);
@@ -80,13 +113,16 @@ const MobileControls = ({ issueId, onReturn, onEventLogged, appMode, initialView
 
     // Initialize QR Scanner (Nimiq primary, html5-qrcode fallback)
     const videoRef = useRef(null);
+    const mediaStreamRef = useRef(null); // Track actual MediaStream for cleanup
     const scannerTypeRef = useRef(null); // Use ref to avoid stale closure
     const [scannerType, setScannerType] = useState(null); // For UI display only
 
-    // Immediate camera release function
+    // Immediate camera release function - stops ALL camera resources
     const stopCamera = () => {
+        console.log('[Scanner] Stopping camera immediately');
+
+        // 1. Stop the scanner library
         if (scannerRef.current) {
-            console.log('[Scanner] Stopping camera immediately');
             try {
                 if (scannerTypeRef.current === 'nimiq') {
                     scannerRef.current.destroy();
@@ -94,13 +130,58 @@ const MobileControls = ({ issueId, onReturn, onEventLogged, appMode, initialView
                     scannerRef.current.stop();
                 }
             } catch (e) {
-                console.warn('[Scanner] Cleanup error:', e);
+                console.warn('[Scanner] Library cleanup error:', e);
             }
             scannerRef.current = null;
             scannerTypeRef.current = null;
         }
+
+        // 2. Force stop video element tracks directly (belt and suspenders)
+        if (videoRef.current && videoRef.current.srcObject) {
+            const tracks = videoRef.current.srcObject.getTracks();
+            tracks.forEach(track => {
+                track.stop();
+                console.log('[Scanner] Stopped video element track:', track.kind);
+            });
+            videoRef.current.srcObject = null;
+        }
+
+        // 3. Stop tracked MediaStream directly (most reliable)
+        if (mediaStreamRef.current) {
+            mediaStreamRef.current.getTracks().forEach(track => {
+                track.stop();
+                console.log('[Scanner] Stopped MediaStream track:', track.label);
+            });
+            mediaStreamRef.current = null;
+        }
+
+        setScannerType(null);
     };
 
+    // AGGRESSIVE camera release whenever tab loses focus or page unloads
+    useEffect(() => {
+        const handleVisibilityChange = () => {
+            if (document.hidden) {
+                console.log('[Scanner] Tab hidden - stopping camera');
+                stopCamera();
+                setShowScanner(false); // Also close the modal
+            }
+        };
+
+        const handleBeforeUnload = () => {
+            console.log('[Scanner] Page unloading - stopping camera');
+            stopCamera();
+        };
+
+        document.addEventListener('visibilitychange', handleVisibilityChange);
+        window.addEventListener('beforeunload', handleBeforeUnload);
+
+        return () => {
+            stopCamera(); // Cleanup on unmount
+            document.removeEventListener('visibilitychange', handleVisibilityChange);
+            window.removeEventListener('beforeunload', handleBeforeUnload);
+        };
+    }, []);
     useEffect(() => {
         if (!showScanner) {
             setScanResult(null);
@@ -149,6 +230,12 @@ const MobileControls = ({ issueId, onReturn, onEventLogged, appMode, initialView
                     scannerRef.current = qrScanner;
                     scannerTypeRef.current = 'nimiq';
                     setScannerType('nimiq');
+
+                    // Capture MediaStream for reliable cleanup
+                    if (videoRef.current && videoRef.current.srcObject) {
+                        mediaStreamRef.current = videoRef.current.srcObject;
+                    }
+
                     console.log('[Scanner] Nimiq started successfully');
                     return;
                 } catch (nimiqErr) {
@@ -221,7 +308,7 @@ const MobileControls = ({ issueId, onReturn, onEventLogged, appMode, initialView
         };
     }, [showScanner, facingMode]);
 
-    const handleScanSuccess = (decodedText, scanner, decodedResult) => {
+    const handleScanSuccess = async (decodedText, scanner, decodedResult) => {
         // Vibration feedback (if supported)
         if (navigator.vibrate) navigator.vibrate(200);
 
@@ -237,8 +324,19 @@ const MobileControls = ({ issueId, onReturn, onEventLogged, appMode, initialView
 
         if (isPitPart) {
             const targetKey = decodedText.toUpperCase();
-            // Check if key exists in allParts (if available) or internalParts
-            const partsList = allParts || internalParts;
+
+            // ALWAYS fetch fresh parts list to ensure accurate existence check
+            let partsList = allParts || internalParts;
+            try {
+                const freshParts = await invoke(appMode === 'DEMO' ? 'getDemoParts' : 'getProductionParts', { key: appMode === 'DEMO' ? 'getDemoParts' : 'getProductionParts' });
+                if (freshParts && freshParts.length > 0) {
+                    partsList = freshParts;
+                    setInternalParts(freshParts); // Update internal state
+                }
+            } catch (e) {
+                console.warn('[Scanner] Could not refresh parts list:', e);
+            }
+
             const exists = partsList && partsList.some(p => p.key === targetKey);
 
             setScanResult({
@@ -271,18 +369,43 @@ const MobileControls = ({ issueId, onReturn, onEventLogged, appMode, initialView
     };
 
     const handleToggleTorch = async () => {
-        if (!scannerRef.current) return;
         try {
-            const track = scannerRef.current.getRunningTrackCameraCapabilities?.();
-            if (track && track.torchFeature && track.torchFeature().isSupported()) {
-                await track.torchFeature().apply(!torchOn);
-                setTorchOn(!torchOn);
-            } else {
-                alert('Flashlight not available on this device/camera.');
+            // Method 1: Nimiq scanner (preferred)
+            if (scannerTypeRef.current === 'nimiq' && scannerRef.current) {
+                const hasFlash = await scannerRef.current.hasFlash();
+                if (hasFlash) {
+                    await scannerRef.current.toggleFlash();
+                    setTorchOn(!torchOn);
+                    return;
+                }
             }
+
+            // Method 2: Direct MediaStream track
+            if (mediaStreamRef.current) {
+                const track = mediaStreamRef.current.getVideoTracks()[0];
+                const capabilities = track.getCapabilities?.();
+                if (capabilities?.torch) {
+                    await track.applyConstraints({ advanced: [{ torch: !torchOn }] });
+                    setTorchOn(!torchOn);
+                    return;
+                }
+            }
+
+            // Method 3: html5-qrcode API
+            if (scannerTypeRef.current === 'html5' && scannerRef.current) {
+                const caps = scannerRef.current.getRunningTrackCameraCapabilities?.();
+                if (caps?.torchFeature?.()?.isSupported?.()) {
+                    await caps.torchFeature().apply(!torchOn);
+                    setTorchOn(!torchOn);
+                    return;
+                }
+            }
+
+            // No torch available
+            setScanError('Flashlight not available on this device or camera.');
         } catch (err) {
-            console.warn('Torch toggle failed:', err);
-            alert('Unable to toggle flashlight.');
+            console.warn('[Scanner] Torch toggle failed:', err);
+            setScanError('Unable to toggle flashlight: ' + err.message);
         }
     };
 
@@ -480,7 +603,68 @@ const MobileControls = ({ issueId, onReturn, onEventLogged, appMode, initialView
                         <span>Print QR</span>
                     </button>
                 </div>
+
+                {/* Browse Inventory - Navigate to PartDetails view */}
+                <button
+                    onClick={() => {
+                        if (onScanSwitch) {
+                            const parts = allParts || internalParts;
+                            onScanSwitch(parts.length > 0 ? parts[0].key : 'BROWSE');
+                        }
+                    }}
+                    style={{ ...styles.secondaryButton, width: '100%', marginTop: 'var(--spacing-md)' }}
+                >
+                    <List size={20} />
+                    <span>Browse Inventory</span>
+                </button>
             </div>
+
+            {/* COMMENTED OUT: Custom Parts List Modal - Using PartDetails instead
+            {showPartsListModal && (
+                <div style={{ ...styles.modalOverlay, zIndex: 2000 }}>
+                    <div style={{ ...styles.modal, maxHeight: '80vh', overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+                        <div style={styles.modalHeader}>
+                            <h3 style={styles.modalTitle}>Parts Inventory</h3>
+                            <button onClick={() => setShowPartsListModal(false)} style={styles.closeButton}>
+                                <X size={24} />
+                            </button>
+                        </div>
+                        <div style={{ flex: 1, overflow: 'auto', padding: 'var(--spacing-md)' }}>
+                            {(allParts || internalParts).length === 0 ? (
+                                <p style={{ color: 'var(--color-text-secondary)', textAlign: 'center', padding: '20px' }}>No parts found</p>
+                            ) : (
+                                (allParts || internalParts).map(part => (
+                                    <button
+                                        key={part.id || part.key}
+                                        onClick={() => {
+                                            setShowPartsListModal(false);
+                                            if (onScanSwitch) {
+                                                onScanSwitch(part.key);
+                                            }
+                                        }}
+                                        style={{
+                                            width: '100%',
+                                            padding: 'var(--spacing-md)',
+                                            marginBottom: 'var(--spacing-sm)',
+                                            background: 'var(--color-bg-secondary)',
+                                            border: '1px solid var(--color-border)',
+                                            borderRadius: 'var(--radius-md)',
+                                            color: 'var(--color-text-primary)',
+                                            textAlign: 'left',
+                                            cursor: 'pointer',
+                                            transition: 'background 0.2s'
+                                        }}
+                                    >
+                                        <div style={{ fontWeight: 600, marginBottom: '4px' }}>{part.fields?.summary || part.name || part.key}</div>
+                                        <div style={{ fontSize: '12px', color: 'var(--color-text-secondary)' }}>{part.key}</div>
+                                    </button>
+                                ))
+                            )}
+                        </div>
+                    </div>
+                </div>
+            )}
+            END COMMENTED OUT */}
 
             {showAddPartModal && (
                 <div style={{ ...styles.modalOverlay, zIndex: 2000 }}>
@@ -520,16 +704,15 @@ const MobileControls = ({ issueId, onReturn, onEventLogged, appMode, initialView
                             </div>
 
                             <div style={styles.formGroup}>
-                                <label style={styles.label}>LOCATION</label>
+                                <label style={styles.label}>ASSIGNMENT</label>
                                 <select
                                     style={styles.input}
-                                    value={newPart.location}
-                                    onChange={e => setNewPart({ ...newPart, location: e.target.value })}
+                                    value={newPart.assignment || 'Spares'}
+                                    onChange={e => setNewPart({ ...newPart, assignment: e.target.value })}
                                 >
-                                    <option>Garage 1</option>
-                                    <option>Garage 2</option>
-                                    <option>Spares</option>
-                                    <option>Truck 1</option>
+                                    <option value="Spares">Spares</option>
+                                    <option value="Car 1 (Albon)">Car 1 (Albon)</option>
+                                    <option value="Car 2 (Sainz)">Car 2 (Sainz)</option>
                                 </select>
                             </div>
                         </div>
@@ -545,18 +728,6 @@ const MobileControls = ({ issueId, onReturn, onEventLogged, appMode, initialView
 
                             {expandedFields && (
                                 <div style={{ marginTop: '12px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                                    <div style={styles.formGroup}>
-                                        <label style={styles.label}>ASSIGNMENT</label>
-                                        <select
-                                            style={styles.input}
-                                            value={newPart.assignment || ''}
-                                            onChange={e => setNewPart({ ...newPart, assignment: e.target.value })}
-                                        >
-                                            <option value="">Unassigned</option>
-                                            <option value="Car 1">Car 1</option>
-                                            <option value="Car 2">Car 2</option>
-                                        </select>
-                                    </div>
                                     <div style={styles.formGroup}>
                                         <label style={styles.label}>INITIAL LIFE (%)</label>
                                         <input

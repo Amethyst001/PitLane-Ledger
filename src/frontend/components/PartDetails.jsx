@@ -7,7 +7,7 @@ import LogEventModal from './LogEventModal';
 import QRCodePanel from './QRCodePanel';
 import MobileControls from './MobileControls';
 
-const PartDetails = ({ issueId, issueKey, onClose, appMode, onReturn, onScanAnother, isMobileView }) => {
+const PartDetails = ({ issueId, issueKey, onClose, appMode, onReturn, onScanAnother, isMobileView, onEventLogged }) => {
     const [history, setHistory] = useState(null);
     const [loading, setLoading] = useState(true);
     const [allParts, setAllParts] = useState([]);
@@ -23,6 +23,12 @@ const PartDetails = ({ issueId, issueKey, onClose, appMode, onReturn, onScanAnot
     const [showLogModal, setShowLogModal] = useState(false);
     const [showQRPanel, setShowQRPanel] = useState(false);
     const [isMobileMode, setIsMobileMode] = useState(false);
+
+    // Strip emojis from status text - timeline icons are sufficient
+    const stripEmojis = (text) => {
+        if (!text) return text;
+        return text.replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2B50}]|[\u{2705}]|[\u{26A0}]|[\u{2708}]|[\u{1F3C1}]|[\u{1F3ED}]|[\u{1F4E6}]|[\u{1F6A8}]|[\u{1F527}]/gu, '').trim();
+    };
     const [mobileInitialView, setMobileInitialView] = useState(null);
     const [showQRScanner, setShowQRScanner] = useState(false); // QR scanner modal
     const [pressTimer, setPressTimer] = useState(null); // Long press timer
@@ -125,29 +131,88 @@ const PartDetails = ({ issueId, issueKey, onClose, appMode, onReturn, onScanAnot
         }
     };
 
-    const handleLogEvent = async ({ status, note }) => {
+    const handleLogEvent = async ({ status, note, assignment }) => {
+        // OPTIMISTIC UI: Update state immediately for instant feedback
+        const optimisticEvent = {
+            id: `temp-${Date.now()}`,
+            timestamp: new Date().toISOString(),
+            status: status,
+            note: note
+        };
+
+        // Immediately add to history (optimistic)
+        setHistory(prev => [optimisticEvent, ...(prev || [])]);
+
+        // Immediately update part status (and assignment if provided) in local state (optimistic)
+        const partKey = currentPartKey || issueKey;
+        setAllParts(prev => prev.map(p =>
+            p.key === partKey
+                ? {
+                    ...p,
+                    pitlaneStatus: status,
+                    lastUpdated: new Date().toISOString(),
+                    ...(assignment ? { assignment } : {})
+                }
+                : p
+        ));
+
         try {
-            await invoke('logEvent', {
+            // Fire off the resolver (backend will persist)
+            const result = await invoke('logEvent', {
                 key: 'logEvent',
-                issueId,
+                issueId: partKey,
                 status,
-                note
+                note,
+                assignment,
+                appMode
             });
-            // Fix: Re-fetch history after logging with correct payload
-            const updatedHistoryData = await invoke('getHistory', { key: 'getHistory', query: currentPartKey || currentPartId });
-            const historyArray = updatedHistoryData.history || (Array.isArray(updatedHistoryData) ? updatedHistoryData : []);
-            setHistory(historyArray);
+
+            // Use returned event ID to update optimistic event
+            if (result?.event) {
+                setHistory(prev => prev.map(e =>
+                    e.id === optimisticEvent.id ? { ...result.event } : e
+                ));
+            }
+
+            // Use returned updated part if available (avoids refetch)
+            if (result?.updatedPart) {
+                setAllParts(prev => prev.map(p =>
+                    p.key === result.updatedPart.key ? result.updatedPart : p
+                ));
+            }
+
+            // Trigger system-wide refresh in parent (for Dashboard to update)
+            if (onEventLogged) onEventLogged();
+
         } catch (error) {
+            // ROLLBACK: Revert optimistic updates on failure
             console.error('Error logging event:', error);
+            setHistory(prev => prev.filter(e => e.id !== optimisticEvent.id));
+            // Refetch to restore correct state
+            const partsResolver = appMode === 'PROD' ? 'getProductionParts' : 'getDemoParts';
+            const freshParts = await invoke(partsResolver);
+            if (Array.isArray(freshParts)) setAllParts(freshParts);
             throw error;
         }
     };
 
     const handleMobileEventLogged = async () => {
         try {
-            const updatedHistoryData = await invoke('getHistory', { key: 'getHistory', query: currentPartKey || currentPartId });
-            const historyArray = updatedHistoryData.history || (Array.isArray(updatedHistoryData) ? updatedHistoryData : []);
+            // Use correct resolver based on app mode
+            const historyResolver = appMode === 'PROD' ? 'getProductionHistory' : 'getHistory';
+            const updatedHistoryData = await invoke(historyResolver, { key: historyResolver, query: currentPartKey || currentPartId });
+            const historyArray = updatedHistoryData?.history || (Array.isArray(updatedHistoryData) ? updatedHistoryData : []);
             setHistory(historyArray);
+
+            // Also refresh parts list to get updated status
+            const partsResolver = appMode === 'PROD' ? 'getProductionParts' : 'getDemoParts';
+            const updatedParts = await invoke(partsResolver);
+            if (Array.isArray(updatedParts)) {
+                setAllParts(updatedParts);
+            }
+
+            // Trigger system-wide refresh in parent
+            if (onEventLogged) onEventLogged();
         } catch (error) {
             console.error('Error refreshing history:', error);
         }
@@ -170,8 +235,8 @@ const PartDetails = ({ issueId, issueKey, onClose, appMode, onReturn, onScanAnot
                     </div>
                 </div>
                 <div style={styles.liveBadge}>
-                    <Radio size={14} className="pulse" style={{ color: 'var(--color-success)' }} />
-                    <span style={styles.liveBadgeText}>Live</span>
+                    <div style={{ width: '6px', height: '6px', background: '#00D084', borderRadius: '50%', boxShadow: '0 0 8px #00D084' }}></div>
+                    <span style={styles.liveBadgeText}>LIVE</span>
                 </div>
             </div>
 
@@ -187,6 +252,7 @@ const PartDetails = ({ issueId, issueKey, onClose, appMode, onReturn, onScanAnot
                             style={styles.searchInput}
                         />
                         <select
+                            key={`selector-${allParts.length}-${allParts.map(p => p.pitlaneStatus).join('')}`}
                             value={currentPartKey}
                             onChange={(e) => {
                                 const selectedPart = allParts.find(p => p.key === e.target.value);
@@ -205,7 +271,7 @@ const PartDetails = ({ issueId, issueKey, onClose, appMode, onReturn, onScanAnot
                                 )
                                 .map(part => (
                                     <option
-                                        key={part.id}
+                                        key={`${part.id}-${part.pitlaneStatus}`}
                                         value={part.key}
                                         style={{ background: '#0A0E1A', color: 'white' }}
                                     >
@@ -229,7 +295,7 @@ const PartDetails = ({ issueId, issueKey, onClose, appMode, onReturn, onScanAnot
                     {isMobileView && onScanAnother && (
                         <button
                             onClick={onScanAnother}
-                            style={{ ...styles.actionButton, background: 'rgba(0, 184, 217, 0.15)', borderColor: '#00B8D9' }}
+                            style={styles.actionButton}
                             title="Scan Another Part"
                         >
                             <QrCode size={16} />
@@ -323,7 +389,7 @@ const PartDetails = ({ issueId, issueKey, onClose, appMode, onReturn, onScanAnot
                         <div style={styles.statDivider} />
                         <div style={styles.statItem}>
                             <div style={styles.statValue}>
-                                {history?.[0]?.status || '—'}
+                                {stripEmojis(history?.[0]?.status) || '—'}
                             </div>
                             <div style={styles.statLabel}>Status</div>
                         </div>
@@ -344,6 +410,7 @@ const PartDetails = ({ issueId, issueKey, onClose, appMode, onReturn, onScanAnot
                 onSubmit={handleLogEvent}
                 issueId={issueKey || issueId}
                 currentStatus={allParts.find(p => p.key === currentPartKey)?.pitlaneStatus}
+                currentAssignment={allParts.find(p => p.key === currentPartKey)?.assignment}
             />
 
             <QRCodePanel
@@ -461,11 +528,11 @@ const styles = {
     title: { fontSize: '24px', fontWeight: '700', margin: 0, letterSpacing: '-0.02em', lineHeight: '1.2' },
     subtitle: { fontSize: '13px', color: 'var(--color-text-secondary)', marginTop: '4px', fontWeight: '400' },
     liveBadge: {
-        display: 'flex', alignItems: 'center', gap: 'var(--spacing-xs)', padding: '8px 14px',
-        backgroundColor: 'rgba(0, 208, 132, 0.15)', border: '2px solid rgba(0, 208, 132, 0.4)',
-        borderRadius: '8px', fontSize: '13px', fontWeight: '600'
+        display: 'flex', alignItems: 'center', gap: '6px', fontSize: '11px', fontWeight: 700,
+        color: '#00D084', background: 'rgba(0, 208, 132, 0.1)', padding: '2px 8px',
+        borderRadius: '12px', border: '1px solid rgba(0, 208, 132, 0.2)'
     },
-    liveBadgeText: { color: 'var(--color-success)' },
+    liveBadgeText: { color: '#00D084' },
     statsBar: {
         display: 'flex', alignItems: 'center', justifyContent: 'space-around',
         padding: 'var(--spacing-lg)', marginBottom: 'var(--spacing-xl)',

@@ -1,5 +1,85 @@
 import { storage, route, asUser } from '@forge/api';
 
+// === LEVENSHTEIN DISTANCE FOR FUZZY MATCHING ===
+function levenshtein(a, b) {
+  const matrix = [];
+  const aLower = a.toLowerCase();
+  const bLower = b.toLowerCase();
+
+  if (aLower === bLower) return 0;
+  if (!aLower.length) return bLower.length;
+  if (!bLower.length) return aLower.length;
+
+  for (let i = 0; i <= bLower.length; i++) matrix[i] = [i];
+  for (let j = 0; j <= aLower.length; j++) matrix[0][j] = j;
+
+  for (let i = 1; i <= bLower.length; i++) {
+    for (let j = 1; j <= aLower.length; j++) {
+      if (bLower[i - 1] === aLower[j - 1]) {
+        matrix[i][j] = matrix[i - 1][j - 1];
+      } else {
+        matrix[i][j] = Math.min(
+          matrix[i - 1][j - 1] + 1, // substitution
+          matrix[i][j - 1] + 1,     // insertion
+          matrix[i - 1][j] + 1      // deletion
+        );
+      }
+    }
+  }
+  return matrix[bLower.length][aLower.length];
+}
+
+// === F1 PART CATEGORIES DATABASE ===
+const F1_PART_CATEGORIES = {
+  'Power Unit': ['ice', 'internal combustion engine', 'mgu-k', 'mgu-h', 'turbo', 'turbocharger', 'energy store', 'battery', 'control electronics', 'ers'],
+  'Gearbox': ['gearbox', 'transmission', 'casing', 'differential', 'actuator', 'gear', 'sequential', 'hydraulic', 'oil cooler'],
+  'Front Wing': ['front wing', 'nose', 'nose cone', 'front endplate', 'front flap', 'cascade', 'front mainplane', 'cape'],
+  'Rear Wing': ['rear wing', 'drs', 'beam wing', 'rear endplate', 'gurney flap', 'rear mainplane', 'monkey seat'],
+  'Floor': ['floor', 'diffuser', 'plank', 'skid block', 'edge wing', 'tunnel', 'venturi'],
+  'Sidepod': ['sidepod', 'radiator', 'cooling', 'bargeboard', 'inlet', 'airbox'],
+  'Monocoque': ['monocoque', 'chassis', 'survival cell', 'cockpit', 'halo', 'headrest'],
+  'Suspension': ['suspension', 'wishbone', 'pushrod', 'pullrod', 'damper', 'spring', 'anti-roll bar', 'heave element'],
+  'Brakes': ['brake', 'disc', 'caliper', 'duct', 'brake by wire', 'bbw', 'master cylinder'],
+  'Wheels': ['wheel', 'rim', 'wheel nut', 'hub', 'upright'],
+  'Steering': ['steering', 'rack', 'column', 'steering wheel'],
+  'Exhaust': ['exhaust', 'wastegate', 'blowdown'],
+  'Fuel System': ['fuel', 'tank', 'fuel cell', 'pump'],
+  'Electronics': ['sensor', 'ecu', 'wiring', 'harness', 'telemetry', 'antenna']
+};
+
+// Fuzzy classify a part name into an F1 category
+function classifyF1Part(partName) {
+  const nameWords = partName.toLowerCase().split(/\s+/);
+  let bestCategory = 'Other';
+  let bestScore = Infinity;
+
+  for (const [category, keywords] of Object.entries(F1_PART_CATEGORIES)) {
+    for (const keyword of keywords) {
+      // Check if keyword is contained in name (fast path)
+      if (partName.toLowerCase().includes(keyword)) {
+        return category; // Exact substring match
+      }
+
+      // Fuzzy match each word in the part name against each keyword
+      for (const word of nameWords) {
+        if (word.length < 3) continue; // Skip short words
+        const distance = levenshtein(word, keyword);
+        const maxLen = Math.max(word.length, keyword.length);
+        const similarity = 1 - (distance / maxLen);
+
+        // If similarity > 70% and better than previous, update
+        if (similarity > 0.7 && distance < bestScore) {
+          bestScore = distance;
+          bestCategory = category;
+        }
+      }
+    }
+  }
+
+  return bestCategory;
+}
+
+
 // INLINED MOCK DATA (Single Source of Truth)
 function getMockParts() {
   const now = Date.now();
@@ -402,8 +482,8 @@ export const handler = async (event, context) => {
     }
 
     // DEMO HISTORY - Uses ONLY mock data, never touches storage
-    // DUAL-MODE UPDATE: Only execute this block if NOT in PROD mode
-    if ((functionKey === 'rovoGetHistory' || functionKey === 'get-history' || functionKey === 'getHistory') && currentAppMode !== 'PROD') {
+    // Frontend calls this resolver directly for DEMO mode
+    if (functionKey === 'rovoGetHistory' || functionKey === 'get-history' || functionKey === 'getHistory') {
       const query = event.query ||
         (event.payload && event.payload.query) ||
         (event.call && event.call.payload && event.call.payload.query);
@@ -494,7 +574,13 @@ export const handler = async (event, context) => {
 
         console.log('[getProductionHistory] Found part:', part.key, '/', part.name);
 
-        // Generate history using REAL data from CSV
+        // Get user-logged events from per-part storage
+        const historyKey = `partHistory_${part.key}`;
+        const savedEvents = await storage.get(historyKey) || [];
+        console.log('[getProductionHistory] Found', savedEvents.length, 'saved events for', part.key);
+
+        // ALWAYS generate baseline history from CSV data
+        // Then prepend any user-logged events on top
         const history = [];
         const now = Date.now();
 
@@ -504,6 +590,7 @@ export const handler = async (event, context) => {
         const assignment = part.assignment || part.chassis || '';
         const life = part.life || '';
 
+        console.log('[getProductionHistory] No saved events - generating baseline from CSV data');
         console.log('[getProductionHistory] Part data - Status:', status, '| Location:', location, '| Assignment:', assignment, '| Life:', life);
 
         let daysAgo = 0;
@@ -628,9 +715,11 @@ export const handler = async (event, context) => {
           note: `Component logged - Serial: ${part.key}`
         });
 
-        console.log(`[Production History] ${part.key}: ${history.length} events over ${daysAgo}d`);
+        console.log(`[Production History] ${part.key}: ${history.length} baseline events, ${savedEvents.length} saved events`);
 
-        return { part: part, history: history };
+        // Merge: prepend saved events to baseline history (most recent first)
+        const mergedHistory = [...savedEvents, ...history];
+        return { part: part, history: mergedHistory };
       } catch (error) {
         console.error('[getProductionHistory] EXCEPTION:', error.message, error.stack);
         return { error: `Internal error: ${error.message}` };
@@ -638,13 +727,32 @@ export const handler = async (event, context) => {
     }
 
     if (functionKey === 'rovoGetRaceCalendar' || functionKey === 'get-race-calendar' || functionKey === 'getRaceCalendar') {
+      // Try to load from storage first
+      const savedCalendar = await storage.get('raceCalendar');
+      if (savedCalendar && Array.isArray(savedCalendar) && savedCalendar.length > 0) {
+        console.log('[getRaceCalendar] Returning saved calendar:', savedCalendar.length, 'races');
+        return savedCalendar;
+      }
+
+      // Fallback to default calendar
       const now = new Date();
       const year = now.getFullYear() + 1; // Next year
-      return [
+      const defaultCalendar = [
         { round: 1, name: 'Bahrain GP', date: `${year}-03-02`, location: 'Sakhir', weather: 'Clear, 28°C' },
         { round: 2, name: 'Saudi Arabian GP', date: `${year}-03-09`, location: 'Jeddah', weather: 'Night, 26°C' },
         { round: 3, name: 'Australian GP', date: `${year}-03-23`, location: 'Melbourne', weather: 'Partly Cloudy, 22°C' }
       ];
+      return defaultCalendar;
+    }
+
+    if (functionKey === 'setRaceCalendar') {
+      const calendar = event.calendar || event.payload?.calendar;
+      if (calendar && Array.isArray(calendar)) {
+        await storage.set('raceCalendar', calendar);
+        console.log('[setRaceCalendar] Saved calendar:', calendar.length, 'races');
+        return { success: true, count: calendar.length };
+      }
+      return { success: false, error: 'Invalid calendar data' };
     }
 
     if (functionKey === 'rovoGetDriverAssignments' || functionKey === 'get-driver-assignments') {
@@ -689,13 +797,174 @@ export const handler = async (event, context) => {
     // --- PHASE 2 & 3: DOMAIN LOGIC & WRITES ---
 
     if (functionKey === 'rovoLogPartEvent' || functionKey === 'log-part-event' || functionKey === 'logEvent') {
-      console.log('[Resolver] Logging event:', event);
-      return { status: 'SUCCESS', message: 'Event logged successfully.', eventId: uuid() };
+      console.log('[logEvent] Full event:', JSON.stringify(event));
+
+      // Extract parameters from various nested locations
+      const issueId = event.issueId || event.partKey ||
+        event.payload?.issueId || event.payload?.partKey ||
+        event.call?.payload?.issueId || event.call?.payload?.partKey;
+
+      const status = event.status ||
+        event.payload?.status ||
+        event.call?.payload?.status;
+
+      const note = event.note ||
+        event.payload?.note ||
+        event.call?.payload?.note || '';
+
+      // Extract mode from frontend (takes precedence over storage)
+      const passedMode = event.appMode ||
+        event.payload?.appMode ||
+        event.call?.payload?.appMode;
+      const effectiveMode = passedMode || currentAppMode;
+
+      console.log('[logEvent] Extracted - issueId:', issueId, 'status:', status, 'note:', note, 'mode:', effectiveMode);
+
+      if (!issueId || !status) {
+        console.error('[logEvent] Missing required fields');
+        return { success: false, error: 'Missing issueId or status' };
+      }
+
+      const eventId = uuid();
+      const newEvent = {
+        id: eventId,
+        timestamp: new Date().toISOString(),
+        status: status,
+        note: note
+      };
+
+      let updatedPart = null;
+
+      // PROD MODE: Persist to storage with PARALLEL operations
+      if (effectiveMode === 'PROD') {
+        try {
+          // Fetch history and inventory in PARALLEL
+          const historyKey = `partHistory_${issueId}`;
+          const [existingHistory, inventory] = await Promise.all([
+            storage.get(historyKey),
+            storage.get('inventory')
+          ]);
+
+          const historyArray = existingHistory || [];
+          const inventoryArray = inventory || [];
+
+          // Update history (add new event at beginning)
+          historyArray.unshift(newEvent);
+          const trimmedHistory = historyArray.slice(0, 100);
+
+          // Update part status in inventory
+          const partIndex = inventoryArray.findIndex(p => p.key === issueId);
+          if (partIndex >= 0) {
+            inventoryArray[partIndex].pitlaneStatus = status;
+            inventoryArray[partIndex].lastUpdated = new Date().toISOString();
+
+            // Update assignment if provided
+            const newAssignment = event.assignment ||
+              event.payload?.assignment ||
+              event.call?.payload?.assignment;
+            if (newAssignment) {
+              inventoryArray[partIndex].assignment = newAssignment;
+              console.log('[logEvent] Updated assignment to:', newAssignment);
+            }
+
+            updatedPart = inventoryArray[partIndex];
+          }
+
+          // Save BOTH in PARALLEL
+          await Promise.all([
+            storage.set(historyKey, trimmedHistory),
+            storage.set('inventory', inventoryArray)
+          ]);
+
+          console.log('[logEvent] PROD: Saved in parallel - history:', trimmedHistory.length, 'events');
+
+        } catch (storageError) {
+          console.error('[logEvent] Storage error:', storageError);
+          return { success: false, error: 'Failed to persist event: ' + storageError.message };
+        }
+      } else {
+        // DEMO MODE: Just log success (ephemeral, handled in frontend state)
+        console.log('[logEvent] DEMO: Event logged (ephemeral)');
+      }
+
+      return {
+        success: true,
+        status: 'SUCCESS',
+        message: 'Event logged successfully.',
+        eventId: eventId,
+        event: newEvent,
+        updatedPart: updatedPart // Return updated part to avoid refetch
+      };
     }
 
     if (functionKey === 'addPart') {
-      console.log('[Resolver] Adding part:', event.part || event.payload?.part);
-      return { status: 'SUCCESS', message: 'Part added to inventory.', partId: uuid() };
+      const partData = event.part || event.payload?.part || event.call?.payload?.part;
+      console.log('[addPart] Adding part:', partData);
+
+      if (!partData || !partData.key) {
+        return { success: false, error: 'Missing part data or key' };
+      }
+
+      // Extract mode from frontend (takes precedence over storage)
+      const passedMode = event.appMode ||
+        event.payload?.appMode ||
+        event.call?.payload?.appMode;
+      const effectiveMode = passedMode || currentAppMode;
+
+      const newPartId = uuid();
+
+      // Auto-classify part using Levenshtein-based fuzzy matching
+      const autoCategory = classifyF1Part(partData.name || 'Unknown Part');
+      console.log('[addPart] Auto-classified as:', autoCategory);
+
+      const newPart = {
+        id: newPartId,
+        key: partData.key,
+        name: partData.name || 'Unknown Part',
+        category: autoCategory, // Auto-classified F1 category
+        pitlaneStatus: partData.pitlaneStatus || '🏭 Manufactured',
+        location: partData.location || 'Not specified',
+        assignment: partData.assignment || 'Unassigned',
+        life: partData.life || 100,
+        lastUpdated: new Date().toISOString(),
+        createdAt: new Date().toISOString(), // Track creation time
+        lifeRemaining: 6,
+        predictiveStatus: 'HEALTHY',
+        isNew: true // Flag for Recent Activity
+      };
+
+      // PROD MODE: Persist to storage
+      if (effectiveMode === 'PROD') {
+        try {
+          const inventory = await storage.get('inventory') || [];
+
+          // Check for duplicate key
+          const existingIndex = inventory.findIndex(p => p.key === newPart.key);
+          if (existingIndex >= 0) {
+            console.log('[addPart] Part key already exists, updating:', newPart.key);
+            inventory[existingIndex] = { ...inventory[existingIndex], ...newPart };
+          } else {
+            inventory.push(newPart);
+          }
+
+          await storage.set('inventory', inventory);
+          console.log('[addPart] PROD: Saved part to inventory. Total:', inventory.length);
+        } catch (storageError) {
+          console.error('[addPart] Storage error:', storageError);
+          return { success: false, error: 'Failed to save part: ' + storageError.message };
+        }
+      } else {
+        // DEMO MODE: Ephemeral, just log success
+        console.log('[addPart] DEMO: Part added (ephemeral)');
+      }
+
+      return {
+        success: true,
+        status: 'SUCCESS',
+        message: 'Part added to inventory.',
+        partId: newPartId,
+        part: newPart
+      };
     }
 
     if (functionKey === 'rovoUpdatePartStatus' || functionKey === 'update-part-status') {

@@ -9,7 +9,7 @@ import RaceCalendarSettings from './RaceCalendarSettings';
 import logo from '../pitlane.png';
 import OnboardingGuide from './OnboardingGuide';
 
-const Dashboard = ({ appMode }) => {
+const Dashboard = ({ appMode, refreshTrigger, onEventLogged }) => {
     const [parts, setParts] = useState([]);
     const [stats, setStats] = useState({ total: 0, trackside: 0, inTransit: 0, critical: 0 });
     const [loading, setLoading] = useState(true);
@@ -26,6 +26,7 @@ const Dashboard = ({ appMode }) => {
     const [raceCalendar, setRaceCalendar] = useState([]);
     const [showOnboarding, setShowOnboarding] = useState(false);
     const [showSettings, setShowSettings] = useState(false);
+    const [showActivityShowMore, setShowActivityShowMore] = useState(false);
 
     // Initial Load
     useEffect(() => {
@@ -40,6 +41,30 @@ const Dashboard = ({ appMode }) => {
             }
         }, 5000);
         return () => clearInterval(interval);
+    }, []);
+
+    // Refresh when parent triggers (after event logging)
+    useEffect(() => {
+        if (refreshTrigger > 0) {
+            fetchData(true); // Silent refresh
+        }
+    }, [refreshTrigger]);
+
+    // Listen for keyboard shortcuts from App.jsx
+    useEffect(() => {
+        const handleFocusSearch = () => {
+            const searchInput = document.querySelector('input[placeholder*="Search"]');
+            if (searchInput) searchInput.focus();
+        };
+        const handleFilter = (e) => {
+            if (e.detail) setStatusFilter(e.detail);
+        };
+        window.addEventListener('pitlane:focus-search', handleFocusSearch);
+        window.addEventListener('pitlane:filter', handleFilter);
+        return () => {
+            window.removeEventListener('pitlane:focus-search', handleFocusSearch);
+            window.removeEventListener('pitlane:filter', handleFilter);
+        };
     }, []);
 
     // Recalculate stats when filter changes
@@ -98,8 +123,12 @@ const Dashboard = ({ appMode }) => {
                 // Use demo names for DEMO mode, saved names for PROD mode
                 if (appMode === 'DEMO') {
                     setDriverNames({ car1: 'Alex Albon', car2: 'Carlos Sainz' });
-                } else if (fleetConfig) {
+                } else if (fleetConfig && fleetConfig.car1 !== 'Car 1') {
+                    // Use saved config if it's not the default placeholder
                     setDriverNames({ car1: fleetConfig.car1, car2: fleetConfig.car2 });
+                } else {
+                    // Fall back to default driver names for PROD if not configured
+                    setDriverNames({ car1: 'Alex Albon', car2: 'Carlos Sainz' });
                 }
             }
 
@@ -185,17 +214,162 @@ const Dashboard = ({ appMode }) => {
         return a.name.localeCompare(b.name);
     });
 
-    // Readiness Score Calculation
-    const readinessScore = stats.total > 0 ? Math.round((stats.trackside / stats.total) * 100) : 0;
-    const getPartWeight = (partName) => {
-        if (partName.includes('Power Unit') || partName.includes('Engine') || partName.includes('Gearbox')) return 5;
-        if (partName.includes('Wing') || partName.includes('Floor')) return 3;
-        return 1;
+    // Fleet Readiness Calculation - SMART scoring with spare coverage:
+    // Core logic: Trackside=100%, Transit=50%, Manufactured=25%, Damaged=0%
+    // Critical penalty REDUCED if a healthy spare exists for that part type
+    // Spares contribute to overall readiness as backup buffer
+    const calculateFleetReadiness = () => {
+        const activeParts = (Array.isArray(parts) ? parts : []).filter(p => !['RETIRED', 'SCRAPPED'].includes(p.pitlaneStatus));
+        if (activeParts.length === 0) return 0;
+
+        // Weight by importance (Power Unit most critical)
+        const getWeight = (name) => {
+            if (name.includes('Power Unit') || name.includes('Engine') || name.includes('Gearbox')) return 5;
+            if (name.includes('Wing') || name.includes('Floor') || name.includes('Chassis')) return 3;
+            if (name.includes('Brake') || name.includes('Suspension') || name.includes('Wheel')) return 2;
+            return 1;
+        };
+
+        // Get part category for spare matching
+        const getCategory = (name) => {
+            if (name.includes('Power Unit') || name.includes('ICE') || name.includes('MGU')) return 'power_unit';
+            if (name.includes('Gearbox')) return 'gearbox';
+            if (name.includes('Front Wing')) return 'front_wing';
+            if (name.includes('Rear Wing')) return 'rear_wing';
+            if (name.includes('Floor')) return 'floor';
+            return name.split(' ')[0].toLowerCase(); // First word as fallback
+        };
+
+        // Build spare coverage map: { category: [healthy spares count] }
+        const spareCoverage = {};
+        activeParts.forEach(p => {
+            const isSpare = p.assignment?.includes('Spare') || !p.assignment?.includes('Car');
+            const isHealthy = !p.pitlaneStatus.includes('DAMAGED') && p.predictiveStatus !== 'CRITICAL';
+            const isReady = p.pitlaneStatus.includes('Trackside') || p.pitlaneStatus.includes('Manufactured');
+
+            if (isSpare && isHealthy && isReady) {
+                const cat = getCategory(p.name);
+                spareCoverage[cat] = (spareCoverage[cat] || 0) + 1;
+            }
+        });
+
+        let readyScore = 0;
+        let totalWeight = 0;
+
+        activeParts.forEach(p => {
+            const weight = getWeight(p.name);
+            const category = getCategory(p.name);
+            const hasHealthySpare = (spareCoverage[category] || 0) > 0;
+
+            totalWeight += weight;
+
+            // Status-based scoring
+            if (p.pitlaneStatus.includes('Trackside')) {
+                readyScore += weight * 1.0; // 100%
+            } else if (p.pitlaneStatus.includes('Transit')) {
+                readyScore += weight * 0.5; // 50%
+            } else if (p.pitlaneStatus.includes('Manufactured')) {
+                readyScore += weight * 0.25; // 25%
+            }
+            // DAMAGED = 0%
+
+            // Penalty for CRITICAL/DAMAGED - BUT reduced if spare available
+            if (p.predictiveStatus === 'CRITICAL' || p.pitlaneStatus.includes('DAMAGED')) {
+                const basePenalty = weight * 0.4; // 40% base penalty
+                const actualPenalty = hasHealthySpare ? basePenalty * 0.5 : basePenalty; // 50% reduction if covered
+                readyScore -= actualPenalty;
+            }
+
+            // Age factor: Parts with lower life remaining should reduce score
+            if (p.lifeRemaining <= 1) {
+                readyScore -= weight * 0.2; // Extra penalty for very low life
+            }
+        });
+
+        // Bonus: Extra confidence if critical categories have spare coverage
+        const criticalCategories = ['power_unit', 'gearbox', 'front_wing', 'rear_wing'];
+        const coverageBonus = criticalCategories.filter(cat => spareCoverage[cat] > 0).length * 2;
+        readyScore += coverageBonus;
+
+        // Future enhancements (IDEAS - not implemented yet):
+        // - Race proximity factor: penalize transit/factory parts when race is near
+        // - Location-based readiness: Garage parts are immediately available
+        // - Part age/usage history weighting
+        // - Historical failure rate consideration
+
+        return Math.max(0, Math.min(100, Math.round((readyScore / totalWeight) * 100)));
     };
-    const activeGlobalParts = (Array.isArray(parts) ? parts : []).filter(p => !['RETIRED', 'SCRAPPED'].includes(p.pitlaneStatus));
-    const totalWeight = activeGlobalParts.reduce((sum, p) => sum + getPartWeight(p.name), 0);
-    const tracksideWeight = activeGlobalParts.filter(p => p.pitlaneStatus.includes('Trackside')).reduce((sum, p) => sum + getPartWeight(p.name), 0);
-    const weightedReadiness = totalWeight > 0 ? Math.round((tracksideWeight / totalWeight) * 100) : readinessScore;
+    const weightedReadiness = calculateFleetReadiness();
+
+    // === INTELLIGENT RECOMMENDATIONS ===
+    const generateRecommendations = () => {
+        const recommendations = [];
+        const activeParts = parts.filter(p => !['RETIRED', 'SCRAPPED'].includes(p.pitlaneStatus));
+
+        // Get part category for matching
+        const getCategory = (name) => {
+            if (name.includes('Power Unit') || name.includes('ICE') || name.includes('MGU')) return 'power_unit';
+            if (name.includes('Gearbox')) return 'gearbox';
+            if (name.includes('Front Wing')) return 'front_wing';
+            if (name.includes('Rear Wing')) return 'rear_wing';
+            if (name.includes('Floor')) return 'floor';
+            return name.split(' ')[0].toLowerCase();
+        };
+
+        // Find critical car parts that have healthy spares
+        const carParts = activeParts.filter(p => p.assignment?.includes('Car'));
+        const spares = activeParts.filter(p => p.assignment?.includes('Spare') || !p.assignment?.includes('Car'));
+
+        carParts.forEach(carPart => {
+            const isCritical = carPart.predictiveStatus === 'CRITICAL' ||
+                carPart.lifeRemaining <= 1 ||
+                carPart.pitlaneStatus.includes('DAMAGED');
+
+            if (isCritical) {
+                const category = getCategory(carPart.name);
+                const healthySpare = spares.find(s =>
+                    getCategory(s.name) === category &&
+                    !s.pitlaneStatus.includes('DAMAGED') &&
+                    s.predictiveStatus !== 'CRITICAL' &&
+                    s.lifeRemaining > 2 &&
+                    (s.location?.includes('Garage') || s.pitlaneStatus.includes('Trackside'))
+                );
+
+                if (healthySpare) {
+                    recommendations.push({
+                        type: 'SWAP',
+                        priority: carPart.pitlaneStatus.includes('DAMAGED') ? 'CRITICAL' : 'WARNING',
+                        message: `Swap ${carPart.name} with ${healthySpare.name}`,
+                        fromPart: carPart,
+                        toPart: healthySpare,
+                        reason: carPart.pitlaneStatus.includes('DAMAGED')
+                            ? 'Damaged part has healthy spare available'
+                            : `Only ${carPart.lifeRemaining} race${carPart.lifeRemaining === 1 ? '' : 's'} remaining`
+                    });
+                }
+            }
+        });
+
+        // Check for parts still at factory when race is near
+        const nextRace = raceCalendar?.[0];
+        if (nextRace) {
+            const daysToRace = nextRace.daysAway ?? Math.ceil((new Date(nextRace.date) - new Date()) / (1000 * 60 * 60 * 24));
+            if (daysToRace <= 2) {
+                activeParts.filter(p => p.location?.includes('Factory')).forEach(p => {
+                    recommendations.push({
+                        type: 'LOGISTICS',
+                        priority: 'WARNING',
+                        message: `${p.name} is at Factory - may not arrive before race`,
+                        part: p,
+                        reason: `Race in ${daysToRace} day${daysToRace === 1 ? '' : 's'}, part at ${p.location}`
+                    });
+                });
+            }
+        }
+
+        return recommendations;
+    };
+    const recommendations = generateRecommendations();
 
     // === LOADING STATE ===
     if (loading) {
@@ -243,14 +417,14 @@ const Dashboard = ({ appMode }) => {
                                         onClick={() => setActiveFilterChassis('CAR1')}
                                         style={activeFilterChassis === 'CAR1' ? styles.segmentBtnActive : styles.segmentBtn}
                                     >
-                                        <span style={{ color: driverNames.car1 ? '#00A0E3' : 'inherit' }}>Car 1</span>
+                                        <span style={{ color: activeFilterChassis === 'CAR1' ? 'inherit' : '#00A0E3' }}>{driverNames.car1 || 'Car 1'}</span>
                                     </button>
                                     <div style={styles.segmentDivider} />
                                     <button
                                         onClick={() => setActiveFilterChassis('CAR2')}
                                         style={activeFilterChassis === 'CAR2' ? styles.segmentBtnActive : styles.segmentBtn}
                                     >
-                                        <span style={{ color: driverNames.car2 ? '#22D3EE' : 'inherit' }}>Car 2</span>
+                                        <span style={{ color: activeFilterChassis === 'CAR2' ? 'inherit' : '#22D3EE' }}>{driverNames.car2 || 'Car 2'}</span>
                                     </button>
                                     <div style={styles.segmentDivider} />
                                     <button
@@ -282,10 +456,10 @@ const Dashboard = ({ appMode }) => {
             </header>
 
             <div style={styles.grid}>
-                <StatCard title="Total Inventory" value={stats.total} icon={<Package size={20} />} color="#00A0E3" sub={`Synced: ${lastSynced.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`} />
-                <StatCard title="Trackside Ready" value={stats.trackside} icon={<CheckCircle size={20} />} color="#00D084" sub="Race Available" />
-                <StatCard title="In Transit" value={stats.inTransit} icon={<Activity size={20} />} color="#F59E0B" sub="En Route" />
-                <StatCard title="Critical Issues" value={stats.critical} icon={<AlertTriangle size={20} />} color="#F04438" sub="Requires Attention" isCritical />
+                <StatCard title="Total Inventory" value={stats.total} icon={<Package size={20} />} color="#00A0E3" sub={`Synced: ${lastSynced.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`} onClick={() => setStatusFilter('ALL')} isActive={statusFilter === 'ALL'} />
+                <StatCard title="Trackside Ready" value={stats.trackside} icon={<CheckCircle size={20} />} color="#00D084" sub="Race Available" onClick={() => setStatusFilter('TRACKSIDE')} isActive={statusFilter === 'TRACKSIDE'} />
+                <StatCard title="In Transit" value={stats.inTransit} icon={<Activity size={20} />} color="#F59E0B" sub="En Route" onClick={() => setStatusFilter('TRANSIT')} isActive={statusFilter === 'TRANSIT'} />
+                <StatCard title="Critical Issues" value={stats.critical} icon={<AlertTriangle size={20} />} color="#F04438" sub="Requires Attention" isCritical onClick={() => setStatusFilter('CRITICAL')} isActive={statusFilter === 'CRITICAL'} />
             </div>
 
             <div style={styles.splitView}>
@@ -336,6 +510,28 @@ const Dashboard = ({ appMode }) => {
                                     value={searchQuery}
                                     onChange={(e) => setSearchQuery(e.target.value)}
                                 />
+                                {(searchQuery || statusFilter !== 'ALL') && (
+                                    <button
+                                        onClick={() => { setSearchQuery(''); setStatusFilter('ALL'); }}
+                                        style={{
+                                            background: 'rgba(0, 184, 217, 0.15)',
+                                            border: '1px solid rgba(0, 184, 217, 0.3)',
+                                            borderRadius: '6px',
+                                            padding: '6px 12px',
+                                            color: '#00D9FF',
+                                            fontSize: '12px',
+                                            cursor: 'pointer',
+                                            marginLeft: '8px',
+                                            display: 'flex',
+                                            alignItems: 'center',
+                                            gap: '4px',
+                                            transition: 'all 0.2s ease'
+                                        }}
+                                        title="Clear search and filters"
+                                    >
+                                        <X size={14} /> Clear Filter
+                                    </button>
+                                )}
                             </div>
                         </div>
                         <div style={{ overflowY: 'auto', flex: 1 }}>
@@ -348,7 +544,7 @@ const Dashboard = ({ appMode }) => {
                                     border: '1px dashed var(--color-border-subtle)',
                                     marginTop: '20px'
                                 }}>
-                                    <div style={{ fontSize: '48px', marginBottom: '16px' }}>🏎️</div>
+
                                     <h3 style={{ fontSize: '20px', fontWeight: '600', color: 'var(--color-text-primary)', marginBottom: '8px' }}>
                                         No Parts Found
                                     </h3>
@@ -384,16 +580,16 @@ const Dashboard = ({ appMode }) => {
                                                             <span style={{ color: 'var(--color-text-muted)' }}>-</span>
                                                         ) : part.assignment ? (
                                                             <span style={getAssignmentStyle(part.assignment)} title={part.assignment}>
-                                                                {part.assignment.includes('Car 1') ? `🔵 23 ${driverNames?.car1?.split(' ').pop() || 'Albon'}` :
-                                                                    part.assignment.includes('Car 2') ? `🟡 55 ${driverNames?.car2?.split(' ').pop() || 'Sainz'}` :
-                                                                        '⚪ Spares'}
+                                                                {part.assignment.includes('Car 1') ? <><span style={{ color: '#3B82F6' }}>●</span> {driverNames?.car1?.split(' ').pop() || 'Albon'}</> :
+                                                                    part.assignment.includes('Car 2') ? <><span style={{ color: '#22D3EE' }}>●</span> {driverNames?.car2?.split(' ').pop() || 'Sainz'}</> :
+                                                                        <><span style={{ color: '#94A3B8' }}>●</span> Spares</>}
                                                             </span>
                                                         ) : '-'}
                                                     </td>
                                                     <td style={styles.td}>{part.key}</td>
                                                     <td style={styles.td}>
                                                         <span style={getStatusStyle(part.pitlaneStatus)}>
-                                                            {part.pitlaneStatus}
+                                                            {part.pitlaneStatus?.replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2B50}]|[\u{2705}]|[\u{26A0}]|[\u{2708}]|[\u{1F3C1}]|[\u{1F3ED}]|[\u{1F4E6}]|[\u{1F6A8}]|[\u{1F527}]/gu, '').trim() || part.pitlaneStatus}
                                                         </span>
                                                     </td>
                                                     <td style={styles.td}>
@@ -430,26 +626,65 @@ const Dashboard = ({ appMode }) => {
                 </div>
 
                 <div style={styles.rightColumn}>
-                    <PredictiveTimeline parts={chassisFilteredParts} calendar={raceCalendar} onOpenSettings={() => setShowCalendarSettings(true)} />
-                    <div style={{ ...styles.panel, height: '450px' }}>
+                    <PredictiveTimeline
+                        parts={chassisFilteredParts}
+                        calendar={raceCalendar}
+                        onOpenSettings={() => setShowCalendarSettings(true)}
+                        onPartClick={(partKey) => setSearchQuery(partKey)}
+                    />
+                    <div style={{ ...styles.panel, height: '450px', display: 'flex', flexDirection: 'column' }}>
                         <div style={styles.panelHeader}>
                             <h3 style={styles.panelTitle}>Recent Activity</h3>
                         </div>
-                        <div style={styles.feed}>
-                            {chassisFilteredParts.slice(0, visibleActivityCount).map((part) => (
-                                <div key={part.id} style={styles.feedItem}>
-                                    <div style={styles.feedIcon}>
-                                        <Clock size={14} color="var(--color-text-secondary)" />
-                                    </div>
-                                    <div style={styles.feedContent}>
-                                        <div style={styles.feedTitle}>{part.name}</div>
-                                        <div style={styles.feedStatus}>
-                                            Updated to <span style={{ color: 'var(--color-accent-cyan)' }}>{part.pitlaneStatus}</span>
+                        <div
+                            style={{ ...styles.feed, flex: 1, overflowY: 'auto' }}
+                            onScroll={(e) => {
+                                const el = e.target;
+                                const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 50;
+                                if (nearBottom && visibleActivityCount === 10 && chassisFilteredParts.length > 10) {
+                                    setShowActivityShowMore(true);
+                                }
+                            }}
+                        >
+                            {[...chassisFilteredParts]
+                                .sort((a, b) => new Date(b.lastUpdated) - new Date(a.lastUpdated))
+                                .slice(0, visibleActivityCount)
+                                .map((part) => (
+                                    <div key={part.id} style={styles.feedItem}>
+                                        <div style={styles.feedIcon}>
+                                            <Clock size={14} color="var(--color-text-secondary)" />
                                         </div>
-                                        <div style={styles.feedTime}>{new Date(part.lastUpdated).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                                        <div style={styles.feedContent}>
+                                            <div style={styles.feedTitle}>{part.name}</div>
+                                            <div style={styles.feedStatus}>
+                                                Updated to <span style={{ color: 'var(--color-accent-cyan)' }}>{part.pitlaneStatus?.replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2B50}]|[\u{2705}]|[\u{26A0}]|[\u{2708}]|[\u{1F3C1}]|[\u{1F3ED}]|[\u{1F4E6}]|[\u{1F6A8}]|[\u{1F527}]/gu, '').trim() || part.pitlaneStatus}</span>
+                                            </div>
+                                            <div style={styles.feedTime}>{new Date(part.lastUpdated).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                                        </div>
                                     </div>
+                                ))}
+                            {/* Show More button - appears when user scrolls to end of first 10 */}
+                            {showActivityShowMore && visibleActivityCount === 10 && chassisFilteredParts.length > 10 && (
+                                <div style={{ padding: '12px', textAlign: 'center' }}>
+                                    <button
+                                        onClick={() => { setVisibleActivityCount(chassisFilteredParts.length); setShowActivityShowMore(false); }}
+                                        style={styles.loadMoreBtn}
+                                    >
+                                        Show More ({chassisFilteredParts.length - 10} more)
+                                    </button>
                                 </div>
-                            ))}
+                            )}
+                            {/* Show Less button - appears when viewing all items */}
+                            {visibleActivityCount > 10 && (
+                                <div style={{ padding: '12px', textAlign: 'center' }}>
+                                    <button
+                                        onClick={() => { setVisibleActivityCount(10); setShowActivityShowMore(false); }}
+                                        style={styles.loadMoreBtn}
+                                    >
+                                        Show Less
+                                    </button>
+                                </div>
+                            )}
                         </div>
                     </div>
                 </div>
@@ -467,6 +702,7 @@ const Dashboard = ({ appMode }) => {
                                 issueId={selectedPart.id}
                                 issueKey={selectedPart.key}
                                 appMode={appMode}
+                                onEventLogged={onEventLogged}
                             />
                         </div>
                     </div>
@@ -501,14 +737,26 @@ const Dashboard = ({ appMode }) => {
     );
 };
 
-const StatCard = ({ title, value, icon, color, sub, isCritical }) => (
-    <div style={{
-        ...styles.card,
-        ...(isCritical ? {
-            border: '1px solid rgba(239, 68, 68, 0.4)',
-            boxShadow: '0 0 15px rgba(239, 68, 68, 0.3), inset 0 0 10px rgba(239, 68, 68, 0.1)'
-        } : {})
-    }}>
+const StatCard = ({ title, value, icon, color, sub, isCritical, onClick, isActive }) => (
+    <div
+        style={{
+            ...styles.card,
+            cursor: onClick ? 'pointer' : 'default',
+            transition: 'all 0.2s ease',
+            transform: isActive ? 'scale(1.02)' : 'scale(1)',
+            ...(isActive ? {
+                border: `2px solid ${color}`,
+                boxShadow: `0 0 20px ${color}40`
+            } : {}),
+            ...(isCritical && !isActive ? {
+                border: '1px solid rgba(239, 68, 68, 0.4)',
+                boxShadow: '0 0 15px rgba(239, 68, 68, 0.3), inset 0 0 10px rgba(239, 68, 68, 0.1)'
+            } : {})
+        }}
+        onClick={onClick}
+        onMouseEnter={(e) => { if (onClick && !isActive) e.currentTarget.style.transform = 'scale(1.02)'; }}
+        onMouseLeave={(e) => { if (onClick && !isActive) e.currentTarget.style.transform = 'scale(1)'; }}
+    >
         <div style={styles.cardHeader}>
             <div style={styles.cardLabel}>{title}</div>
             <div style={{ color }}>{icon}</div>

@@ -68,6 +68,12 @@ const getColorForStatus = (status) => {
 };
 
 const TelemetryTimeline = ({ history }) => {
+    // Strip emojis from status text - timeline circles already have icons
+    const stripEmojis = (text) => {
+        if (!text) return text;
+        return text.replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2B50}]|[\u{2705}]|[\u{26A0}]|[\u{2708}]|[\u{1F3C1}]|[\u{1F3ED}]|[\u{1F4E6}]|[\u{1F6A8}]|[\u{1F527}]/gu, '').trim();
+    };
+
     if (!Array.isArray(history) || history.length === 0) {
         return (
             <div style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--color-text-muted)' }}>
@@ -80,6 +86,7 @@ const TelemetryTimeline = ({ history }) => {
         <VerticalTimeline lineColor="var(--color-border-neon)" layout="1-column-left" animate={true}>
             {history.map((event) => {
                 const color = getColorForStatus(event.status);
+                const displayStatus = stripEmojis(event.status);
 
                 return (
                     <VerticalTimelineElement
@@ -116,7 +123,7 @@ const TelemetryTimeline = ({ history }) => {
                             marginBottom: 'var(--spacing-sm)',
                             color: 'var(--color-text-primary)'
                         }}>
-                            {event.status}
+                            {displayStatus}
                         </h3>
 
                         {event.note && (
