@@ -4,15 +4,15 @@ import logo from '../pitlane.png';
 
 // Import Williams Racing car images in preferred order
 import carWRImage from '../Image files/Car WR.avif';
-import williams800 from '../Image files/0 Williams 800.webp';
 import wrCarImage from '../Image files/WR car.avif';
 import williamsCarImage from '../Image files/Williams Car.avif';
 import wrCar2024Image from '../Image files/WR car 2024.avif';
 import wrCar2024RightImage from '../Image files/WR car 2024 right.avif';
-import wrImage from '../Image files/WR.avif';
 
 const WelcomeGate = ({ onEnter }) => {
     const [isLoading, setIsLoading] = useState(false);
+    const [currentImageIndex, setCurrentImageIndex] = useState(0);
+    const [prevImageIndex, setPrevImageIndex] = useState(null);
 
     const handleEnter = async () => {
         setIsLoading(true);
@@ -27,28 +27,90 @@ const WelcomeGate = ({ onEnter }) => {
 
     // Image config with individual blur and zoom settings
     const imageConfigs = [
-        { src: carWRImage, blur: 3, zoom: 100 },              // Car WR - normal
-        { src: williams800, blur: 4, zoom: 100 },             // Williams 800 - increased blur
-        { src: wrCarImage, blur: 4, zoom: 115 },              // WR car - increased blur + 15% zoom
-        { src: williamsCarImage, blur: 4, zoom: 100 },        // Williams Car - increased blur
-        { src: wrCar2024Image, blur: 4, zoom: 125 },          // WR car 2024 - increased blur + 25% zoom
-        { src: wrCar2024RightImage, blur: 4, zoom: 115 },     // WR car 2024 right - increased blur + 15% zoom
-        { src: wrImage, blur: 6, zoom: 100 }                   // WR - extra blur (last, for text readability)
+        { src: carWRImage, blur: 2, zoom: 105 },
+        { src: wrCarImage, blur: 3, zoom: 115 },
+        { src: williamsCarImage, blur: 3, zoom: 110 },
+        { src: wrCar2024Image, blur: 3, zoom: 120 },
+        { src: wrCar2024RightImage, blur: 3, zoom: 112 }
     ];
-    const [currentImageIndex, setCurrentImageIndex] = useState(0);
 
-    // Rotate images every 12 seconds
+    // Smooth crossfade image rotation every 12 seconds
     useEffect(() => {
         const interval = setInterval(() => {
+            setPrevImageIndex(currentImageIndex);
             setCurrentImageIndex((prev) => (prev + 1) % imageConfigs.length);
+
+            // Clear previous image after transition completes (must match fadeOut duration)
+            setTimeout(() => {
+                setPrevImageIndex(null);
+            }, 3000);
         }, 12000);
         return () => clearInterval(interval);
-    }, [imageConfigs.length]);
+    }, [currentImageIndex, imageConfigs.length]);
 
     return (
         <div style={styles.container}>
-            {/* Animated Background Carousel */}
+            {/* CSS for animations */}
+            <style>{`
+                @keyframes kenBurns {
+                    0% { transform: scale(1) translateX(0); }
+                    50% { transform: scale(1.03) translateX(-0.2%); }
+                    100% { transform: scale(1) translateX(0); }
+                }
+                @keyframes fadeIn {
+                    from { opacity: 0; }
+                    to { opacity: 1; }
+                }
+                @keyframes fadeOut {
+                    from { opacity: 1; }
+                    to { opacity: 0; }
+                }
+                @keyframes floatParticle {
+                    0% { transform: translateY(0) translateX(0); opacity: 0; }
+                    3% { opacity: 0.6; }
+                    97% { opacity: 0.6; }
+                    100% { transform: translateY(-100vh) translateX(8px); opacity: 0; }
+                }
+                @keyframes pulseGlow {
+                    0%, 100% { opacity: 0.12; transform: translate(-50%, -50%) scale(1); }
+                    50% { opacity: 0.18; transform: translate(-50%, -50%) scale(1.05); }
+                }
+                .bg-image-current {
+                    animation: kenBurns 35s cubic-bezier(0.4, 0, 0.2, 1) infinite, fadeIn 3s ease-in-out;
+                }
+                .bg-image-prev {
+                    animation: fadeOut 3s ease-in-out forwards;
+                }
+                .floating-particle {
+                    position: absolute;
+                    width: 3px;
+                    height: 3px;
+                    background: rgba(0, 184, 217, 0.6);
+                    border-radius: 50%;
+                    box-shadow: 0 0 4px rgba(0, 184, 217, 0.4);
+                    animation: floatParticle 18s linear infinite;
+                }
+                .bg-glow-animated {
+                    animation: pulseGlow 8s ease-in-out infinite;
+                }
+            `}</style>
+
+            {/* Previous Image (fading out) */}
+            {prevImageIndex !== null && (
+                <div
+                    className="bg-image-prev"
+                    style={{
+                        ...styles.bgImage,
+                        backgroundImage: `url(${imageConfigs[prevImageIndex].src})`,
+                        filter: `blur(${imageConfigs[prevImageIndex].blur}px)`,
+                        backgroundSize: `${imageConfigs[prevImageIndex].zoom}%`
+                    }}
+                />
+            )}
+
+            {/* Current Image (fading in with Ken Burns) */}
             <div
+                className="bg-image-current"
                 style={{
                     ...styles.bgImage,
                     backgroundImage: `url(${imageConfigs[currentImageIndex].src})`,
@@ -56,7 +118,23 @@ const WelcomeGate = ({ onEnter }) => {
                     backgroundSize: `${imageConfigs[currentImageIndex].zoom}%`
                 }}
             />
+
             <div style={styles.bgOverlay} />
+
+            {/* Floating Particles - must be above overlay */}
+            {[...Array(12)].map((_, i) => (
+                <div
+                    key={i}
+                    className="floating-particle"
+                    style={{
+                        left: `${5 + (i * 8)}%`,
+                        bottom: '-10px',
+                        animationDelay: `${i * 1.2}s`,
+                        animationDuration: `${14 + (i % 4) * 3}s`,
+                        zIndex: 5
+                    }}
+                />
+            ))}
 
             <div style={styles.content}>
                 <div style={styles.logoContainer}>
@@ -105,8 +183,8 @@ const WelcomeGate = ({ onEnter }) => {
                 </div>
             </div>
 
-            {/* Background Elements */}
-            <div style={styles.bgGlow} />
+            {/* Animated Glow */}
+            <div className="bg-glow-animated" style={styles.bgGlow} />
             <div style={styles.bgGrid} />
         </div>
     );
@@ -198,7 +276,7 @@ const styles = {
         display: 'flex',
         alignItems: 'center',
         gap: '12px',
-        transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+        transition: 'transform 0.3s ease, box-shadow 0.3s ease',
         boxShadow: '0 0 30px rgba(0, 184, 217, 0.4)'
     },
     footer: {
@@ -213,9 +291,9 @@ const styles = {
         top: '50%',
         left: '50%',
         transform: 'translate(-50%, -50%)',
-        width: '800px',
-        height: '800px',
-        background: 'radial-gradient(circle, rgba(0, 102, 202, 0.15) 0%, rgba(0,0,0,0) 70%)',
+        width: '900px',
+        height: '900px',
+        background: 'radial-gradient(circle, rgba(0, 102, 202, 0.18) 0%, rgba(0,0,0,0) 60%)',
         zIndex: 1,
         pointerEvents: 'none'
     },
@@ -225,21 +303,20 @@ const styles = {
         left: 0,
         right: 0,
         bottom: 0,
-        backgroundImage: 'linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px)',
-        backgroundSize: '40px 40px',
+        backgroundImage: 'linear-gradient(rgba(255, 255, 255, 0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(255, 255, 255, 0.02) 1px, transparent 1px)',
+        backgroundSize: '50px 50px',
         zIndex: 0,
         pointerEvents: 'none'
     },
     bgImage: {
         position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundSize: 'cover', // Will be overridden per-image for zoom
+        top: '-5%',
+        left: '-5%',
+        right: '-5%',
+        bottom: '-5%',
+        backgroundSize: 'cover',
         backgroundPosition: 'center',
         backgroundRepeat: 'no-repeat',
-        transition: 'background-image 1.5s ease-in-out, filter 1.5s ease-in-out',
         zIndex: 1,
         pointerEvents: 'none'
     },
@@ -249,7 +326,7 @@ const styles = {
         left: 0,
         right: 0,
         bottom: 0,
-        background: 'linear-gradient(135deg, rgba(5, 8, 16, 0.85) 0%, rgba(5, 8, 16, 0.7) 50%, rgba(5, 8, 16, 0.85) 100%)',
+        background: 'linear-gradient(135deg, rgba(5, 8, 16, 0.88) 0%, rgba(5, 8, 16, 0.72) 50%, rgba(5, 8, 16, 0.88) 100%)',
         zIndex: 2,
         pointerEvents: 'none'
     }

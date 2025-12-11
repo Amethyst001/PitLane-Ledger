@@ -1,37 +1,79 @@
 import React, { useState, useEffect } from 'react';
 
-// Import Williams Racing car images in preferred order
+// Import Williams Racing car images in preferred order (same as WelcomeGate)
 import carWRImage from '../Image files/Car WR.avif';
-import williams800 from '../Image files/0 Williams 800.webp';
 import wrCarImage from '../Image files/WR car.avif';
 import williamsCarImage from '../Image files/Williams Car.avif';
 import wrCar2024Image from '../Image files/WR car 2024.avif';
 import wrCar2024RightImage from '../Image files/WR car 2024 right.avif';
-import wrImage from '../Image files/WR.avif';
 
 const BackgroundCarousel = () => {
-    // Image config with individual blur and zoom settings
+    // Image config with individual blur and zoom settings (synced with WelcomeGate)
     const imageConfigs = [
-        { src: carWRImage, blur: 3, zoom: 100 },              // Car WR - normal
-        { src: wrCarImage, blur: 4, zoom: 115 },              // WR car - increased blur + 15% zoom
-        { src: williamsCarImage, blur: 4, zoom: 100 },        // Williams Car - increased blur
-        { src: wrCar2024Image, blur: 4, zoom: 125 },          // WR car 2024 - increased blur + 25% zoom
-        { src: wrCar2024RightImage, blur: 4, zoom: 115 },     // WR car 2024 right - increased blur + 15% zoom
-        { src: wrImage, blur: 6, zoom: 100 }                   // WR - extra blur (last, for text readability)
+        { src: carWRImage, blur: 2, zoom: 105 },
+        { src: wrCarImage, blur: 3, zoom: 115 },
+        { src: williamsCarImage, blur: 3, zoom: 110 },
+        { src: wrCar2024Image, blur: 3, zoom: 120 },
+        { src: wrCar2024RightImage, blur: 3, zoom: 112 }
     ];
     const [currentImageIndex, setCurrentImageIndex] = useState(0);
+    const [prevImageIndex, setPrevImageIndex] = useState(null);
 
-    // Rotate images every 12 seconds
+    // Smooth crossfade rotation every 12 seconds (matching WelcomeGate)
     useEffect(() => {
         const interval = setInterval(() => {
+            setPrevImageIndex(currentImageIndex);
             setCurrentImageIndex((prev) => (prev + 1) % imageConfigs.length);
-        }, 4000); // 4 seconds for testing - TODO: Change back to 12000 before deployment
+
+            // Clear previous image after transition completes
+            setTimeout(() => {
+                setPrevImageIndex(null);
+            }, 3000);
+        }, 12000);
         return () => clearInterval(interval);
-    }, [imageConfigs.length]);
+    }, [currentImageIndex, imageConfigs.length]);
 
     return (
         <>
+            {/* CSS for animations */}
+            <style>{`
+                @keyframes kenBurnsBg {
+                    0% { transform: scale(1) translateX(0); }
+                    50% { transform: scale(1.03) translateX(-0.2%); }
+                    100% { transform: scale(1) translateX(0); }
+                }
+                @keyframes fadeInBg {
+                    from { opacity: 0; }
+                    to { opacity: 1; }
+                }
+                @keyframes fadeOutBg {
+                    from { opacity: 1; }
+                    to { opacity: 0; }
+                }
+                .carousel-bg-current {
+                    animation: kenBurnsBg 35s cubic-bezier(0.4, 0, 0.2, 1) infinite, fadeInBg 3s ease-in-out;
+                }
+                .carousel-bg-prev {
+                    animation: fadeOutBg 3s ease-in-out forwards;
+                }
+            `}</style>
+
+            {/* Previous Image (fading out) */}
+            {prevImageIndex !== null && (
+                <div
+                    className="carousel-bg-prev"
+                    style={{
+                        ...styles.bgImage,
+                        backgroundImage: `url(${imageConfigs[prevImageIndex].src})`,
+                        filter: `blur(${imageConfigs[prevImageIndex].blur}px)`,
+                        backgroundSize: `${imageConfigs[prevImageIndex].zoom}%`
+                    }}
+                />
+            )}
+
+            {/* Current Image (fading in with Ken Burns) */}
             <div
+                className="carousel-bg-current"
                 style={{
                     ...styles.bgImage,
                     backgroundImage: `url(${imageConfigs[currentImageIndex].src})`,
@@ -47,14 +89,13 @@ const BackgroundCarousel = () => {
 const styles = {
     bgImage: {
         position: 'absolute',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
+        top: '-5%',
+        left: '-5%',
+        right: '-5%',
+        bottom: '-5%',
         backgroundSize: 'cover',
         backgroundPosition: 'center',
         backgroundRepeat: 'no-repeat',
-        transition: 'background-image 1.5s ease-in-out, filter 1.5s ease-in-out',
         zIndex: 1,
         pointerEvents: 'none'
     },
@@ -64,10 +105,11 @@ const styles = {
         left: 0,
         right: 0,
         bottom: 0,
-        background: 'linear-gradient(135deg, rgba(5, 8, 16, 0.85) 0%, rgba(5, 8, 16, 0.7) 50%, rgba(5, 8, 16, 0.85) 100%)',
+        background: 'linear-gradient(135deg, rgba(5, 8, 16, 0.88) 0%, rgba(5, 8, 16, 0.72) 50%, rgba(5, 8, 16, 0.88) 100%)',
         zIndex: 2,
         pointerEvents: 'none'
     }
 };
 
 export default BackgroundCarousel;
+

@@ -71,6 +71,9 @@ const SettingsPanel = ({ onClose, currentDriverNames, onDriverNamesUpdated, appM
         setConfirmModal({ ...confirmModal, isOpen: false });
 
         try {
+            // Clear session storage for DEMO mode cache
+            sessionStorage.removeItem('pitlane_demo_parts');
+
             if (confirmModal.action === 'clearData') {
                 const result = await invoke('clearProductionData');
                 if (result.success) {

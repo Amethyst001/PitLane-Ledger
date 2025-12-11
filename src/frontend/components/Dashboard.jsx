@@ -33,22 +33,34 @@ const Dashboard = ({ appMode, refreshTrigger, onEventLogged }) => {
         fetchData();
     }, []);
 
-    // Polling for "Live" updates (every 5 seconds) - SMART POLLING
+    // Polling for "Live" updates (every 5 seconds) - ONLY IN PROD MODE
+    // In DEMO mode, data is session-local and doesn't need external refresh
     useEffect(() => {
+        if (appMode === 'DEMO') return; // Skip polling in DEMO mode
+
         const interval = setInterval(() => {
             if (document.visibilityState === 'visible') {
                 fetchData(true); // Silent update only if tab is visible
             }
         }, 5000);
         return () => clearInterval(interval);
-    }, []);
+    }, [appMode]);
 
-    // Refresh when parent triggers (after event logging)
+    // Refresh when parent triggers (after event logging) - ONLY IN PROD MODE
+    // In DEMO mode, PartDetails already updates sessionStorage directly
     useEffect(() => {
-        if (refreshTrigger > 0) {
+        if (refreshTrigger > 0 && appMode !== 'DEMO') {
             fetchData(true); // Silent refresh
         }
-    }, [refreshTrigger]);
+    }, [refreshTrigger, appMode]);
+
+    // Sync DEMO mode parts to sessionStorage for session persistence
+    useEffect(() => {
+        if (appMode === 'DEMO' && parts.length > 0) {
+            sessionStorage.setItem('pitlane_demo_parts', JSON.stringify(parts));
+            console.log('[Dashboard] DEMO mode: Synced', parts.length, 'parts to session');
+        }
+    }, [parts, appMode]);
 
     // Listen for keyboard shortcuts from App.jsx
     useEffect(() => {
@@ -66,6 +78,21 @@ const Dashboard = ({ appMode, refreshTrigger, onEventLogged }) => {
             window.removeEventListener('pitlane:filter', handleFilter);
         };
     }, []);
+
+    // Listen for DEMO mode parts updates (from PartDetails/MobileControls)
+    // This updates Dashboard state directly without calling backend
+    useEffect(() => {
+        if (appMode !== 'DEMO') return;
+
+        const handleDemoPartsUpdated = (e) => {
+            if (e.detail?.parts) {
+                console.log('[Dashboard] DEMO: Received parts update event');
+                setParts(e.detail.parts);
+            }
+        };
+        window.addEventListener('pitlane:demo-parts-updated', handleDemoPartsUpdated);
+        return () => window.removeEventListener('pitlane:demo-parts-updated', handleDemoPartsUpdated);
+    }, [appMode]);
 
     // Recalculate stats when filter changes
     useEffect(() => {
@@ -98,12 +125,26 @@ const Dashboard = ({ appMode, refreshTrigger, onEventLogged }) => {
             const prodStatus = await invoke('getProductionStatus');
             console.log('[Dashboard] Production Status:', prodStatus);
 
-            // Call the correct resolver based on mode
-            const resolverName = appMode === 'DEMO' ? 'getDemoParts' : 'getProductionParts';
-            console.log('[Dashboard] Calling resolver:', resolverName, 'for mode:', appMode);
+            let allParts;
 
-            const [allParts, calendar, fleetConfig] = await Promise.all([
-                invoke(resolverName),
+            // DEMO MODE: Use sessionStorage for persistence within browser session
+            if (appMode === 'DEMO') {
+                const cachedDemo = sessionStorage.getItem('pitlane_demo_parts');
+                if (cachedDemo) {
+                    console.log('[Dashboard] DEMO mode: Using cached session data');
+                    allParts = JSON.parse(cachedDemo);
+                } else {
+                    console.log('[Dashboard] DEMO mode: Fetching fresh mock data');
+                    allParts = await invoke('getDemoParts');
+                    // Cache it for the session
+                    sessionStorage.setItem('pitlane_demo_parts', JSON.stringify(allParts));
+                }
+            } else {
+                // PROD MODE: Always fetch from storage
+                allParts = await invoke('getProductionParts');
+            }
+
+            const [calendar, fleetConfig] = await Promise.all([
                 invoke('getRaceCalendar', { key: 'getRaceCalendar' }),
                 invoke('getFleetConfig', { key: 'getFleetConfig' })
             ]);
@@ -164,6 +205,8 @@ const Dashboard = ({ appMode, refreshTrigger, onEventLogged }) => {
 
     const handleResetOnboarding = async () => {
         try {
+            // Clear session storage (DEMO mode cache)
+            sessionStorage.removeItem('pitlane_demo_parts');
             await invoke('resetStorage', { issueId: null });
             window.location.reload();
         } catch (error) {
@@ -260,21 +303,27 @@ const Dashboard = ({ appMode, refreshTrigger, onEventLogged }) => {
             const weight = getWeight(p.name);
             const category = getCategory(p.name);
             const hasHealthySpare = (spareCoverage[category] || 0) > 0;
+            const statusLower = (p.pitlaneStatus || '').toLowerCase();
 
             totalWeight += weight;
 
-            // Status-based scoring
-            if (p.pitlaneStatus.includes('Trackside')) {
+            // Status-based scoring (case-insensitive)
+            if (statusLower.includes('cleared') && statusLower.includes('race')) {
+                readyScore += weight * 1.0; // 100% - Race ready!
+            } else if (statusLower.includes('trackside')) {
                 readyScore += weight * 1.0; // 100%
-            } else if (p.pitlaneStatus.includes('Transit')) {
+            } else if (statusLower.includes('transit')) {
                 readyScore += weight * 0.5; // 50%
-            } else if (p.pitlaneStatus.includes('Manufactured')) {
+            } else if (statusLower.includes('manufactured') || statusLower.includes('quality')) {
                 readyScore += weight * 0.25; // 25%
+            } else if (statusLower.includes('scrap') || statusLower.includes('bin') || statusLower.includes('retired')) {
+                readyScore += 0; // 0% - Should not count
+                totalWeight -= weight; // Remove from total (don't penalize for scrapped parts)
             }
             // DAMAGED = 0%
 
             // Penalty for CRITICAL/DAMAGED - BUT reduced if spare available
-            if (p.predictiveStatus === 'CRITICAL' || p.pitlaneStatus.includes('DAMAGED')) {
+            if (p.predictiveStatus === 'CRITICAL' || statusLower.includes('damage')) {
                 const basePenalty = weight * 0.4; // 40% base penalty
                 const actualPenalty = hasHealthySpare ? basePenalty * 0.5 : basePenalty; // 50% reduction if covered
                 readyScore -= actualPenalty;
@@ -589,7 +638,17 @@ const Dashboard = ({ appMode, refreshTrigger, onEventLogged }) => {
                                                     <td style={styles.td}>{part.key}</td>
                                                     <td style={styles.td}>
                                                         <span style={getStatusStyle(part.pitlaneStatus)}>
-                                                            {part.pitlaneStatus?.replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2B50}]|[\u{2705}]|[\u{26A0}]|[\u{2708}]|[\u{1F3C1}]|[\u{1F3ED}]|[\u{1F4E6}]|[\u{1F6A8}]|[\u{1F527}]/gu, '').trim() || part.pitlaneStatus}
+                                                            {(() => {
+                                                                const cleaned = (part.pitlaneStatus || '').replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2B50}]|[\u{2705}]|[\u{26A0}]|[\u{2708}]|[\u{1F3C1}]|[\u{1F3ED}]|[\u{1F4E6}]|[\u{1F6A8}]|[\u{1F527}]/gu, '').trim();
+                                                                // Shorten common statuses for cleaner display
+                                                                const lower = cleaned.toLowerCase();
+                                                                if (lower.includes('cleared') && lower.includes('race')) return 'Cleared';
+                                                                if (lower.includes('scrapped')) return 'Retired';
+                                                                if (lower.includes('retired')) return 'Retired';
+                                                                if (lower.includes('refurbish')) return 'Refurbished';
+                                                                // Normalize to title case for consistent badge sizing
+                                                                return cleaned.split(' ').map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase()).join(' ');
+                                                            })()}
                                                         </span>
                                                     </td>
                                                     <td style={styles.td}>
@@ -808,10 +867,14 @@ const ReadinessSparkline = ({ readiness }) => {
 
 const getStatusStyle = (status) => {
     const base = { padding: '4px 8px', borderRadius: '4px', fontSize: '12px', fontWeight: 600, display: 'inline-block' };
-    if (status.includes('Trackside')) return { ...base, background: 'rgba(0, 208, 132, 0.15)', color: '#00D084' };
-    if (status.includes('Transit')) return { ...base, background: 'rgba(139, 92, 246, 0.15)', color: 'var(--color-accent-purple)' };
-    if (status.includes('Manufactured')) return { ...base, background: 'rgba(0, 184, 217, 0.15)', color: '#00B8D9' };
-    if (status.includes('DAMAGED')) return { ...base, background: 'rgba(240, 68, 56, 0.15)', color: '#F04438' };
+    const statusLower = (status || '').toLowerCase();
+    if (statusLower.includes('cleared') && statusLower.includes('race')) return { ...base, background: 'rgba(0, 208, 132, 0.15)', color: '#00D084' };
+    if (statusLower.includes('trackside')) return { ...base, background: 'rgba(0, 208, 132, 0.15)', color: '#00D084' };
+    if (statusLower.includes('transit')) return { ...base, background: 'rgba(139, 92, 246, 0.15)', color: 'var(--color-accent-purple)' };
+    if (statusLower.includes('manufactured')) return { ...base, background: 'rgba(0, 184, 217, 0.15)', color: '#00B8D9' };
+    if (statusLower.includes('damage')) return { ...base, background: 'rgba(100, 116, 139, 0.2)', color: '#94A3B8' };
+    if (statusLower.includes('scrap') || statusLower.includes('bin') || statusLower.includes('retired')) return { ...base, background: 'rgba(100, 116, 139, 0.15)', color: '#64748B' };
+    if (statusLower.includes('refurbish')) return { ...base, background: 'rgba(0, 184, 217, 0.15)', color: '#00B8D9' };
     return { ...base, background: 'rgba(148, 163, 184, 0.15)', color: '#94A3B8' };
 };
 

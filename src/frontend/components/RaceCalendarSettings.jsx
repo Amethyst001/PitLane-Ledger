@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { invoke } from '@forge/bridge';
 import { Save, X, Plus, Trash2, Calendar } from 'lucide-react';
 
@@ -10,9 +10,16 @@ const RaceCalendarSettings = ({ onClose, onSave, initialRaces }) => {
     ]);
     const [error, setError] = useState(null);
     const [saving, setSaving] = useState(false);
+    const scrollAreaRef = useRef(null);
 
     const handleAddRace = () => {
         setRaces([...races, { name: '', date: '' }]);
+        // Auto-scroll to bottom after adding
+        setTimeout(() => {
+            if (scrollAreaRef.current) {
+                scrollAreaRef.current.scrollTop = scrollAreaRef.current.scrollHeight;
+            }
+        }, 50);
     };
 
     const handleRemoveRace = (index) => {
@@ -52,7 +59,9 @@ const RaceCalendarSettings = ({ onClose, onSave, initialRaces }) => {
                 return { ...r, daysAway };
             }).filter(r => r.daysAway >= 0); // Only keep future or today's races
 
-            await invoke('setRaceCalendar', { calendar: processed });
+            console.log('[RaceCalendarSettings] Saving calendar:', processed);
+            const result = await invoke('setRaceCalendar', { key: 'setRaceCalendar', calendar: processed });
+            console.log('[RaceCalendarSettings] Save result:', result);
             onSave(processed);
             onClose();
         } catch (err) {
@@ -66,23 +75,18 @@ const RaceCalendarSettings = ({ onClose, onSave, initialRaces }) => {
         <div style={styles.overlay}>
             <div style={styles.modal}>
                 <div style={styles.header}>
-                    <h3 style={styles.title}>Race Calendar Settings</h3>
+                    <h3 style={styles.title}>Race Calendar</h3>
                     <button onClick={onClose} style={styles.closeBtn}><X size={20} /></button>
                 </div>
 
                 <div style={styles.content}>
-                    <div style={styles.listHeader}>
-                        <span style={{ flex: 2 }}>Race Name</span>
-                        <span style={{ flex: 1 }}>Date</span>
-                        <span style={{ width: '30px' }}></span>
-                    </div>
-
-                    <div style={styles.scrollArea}>
+                    <div style={styles.scrollArea} ref={scrollAreaRef}>
                         {races.map((race, idx) => (
                             <div key={idx} style={styles.row}>
+                                <div style={styles.rowNumber}>{idx + 1}</div>
                                 <input
                                     style={styles.input}
-                                    placeholder="e.g. Monaco GP"
+                                    placeholder="Race name (e.g. Monaco GP)"
                                     value={race.name}
                                     onChange={(e) => handleChange(idx, 'name', e.target.value)}
                                 />
@@ -93,7 +97,7 @@ const RaceCalendarSettings = ({ onClose, onSave, initialRaces }) => {
                                     onChange={(e) => handleChange(idx, 'date', e.target.value)}
                                 />
                                 <button onClick={() => handleRemoveRace(idx)} style={styles.deleteBtn}>
-                                    <Trash2 size={16} />
+                                    <Trash2 size={14} />
                                 </button>
                             </div>
                         ))}
@@ -111,7 +115,7 @@ const RaceCalendarSettings = ({ onClose, onSave, initialRaces }) => {
                     <button onClick={onClose} style={styles.cancelBtn}>Cancel</button>
                     <button onClick={handleSave} style={styles.saveBtn} disabled={saving}>
                         <Save size={16} />
-                        {saving ? 'Saving...' : 'Save Calendar'}
+                        {saving ? 'Saving...' : 'Save'}
                     </button>
                 </div>
             </div>
@@ -141,6 +145,12 @@ const styles = {
     listHeader: { display: 'flex', gap: '12px', fontSize: '12px', fontWeight: 600, color: 'var(--color-text-muted)', textTransform: 'uppercase' },
     scrollArea: { overflowY: 'auto', maxHeight: '300px', display: 'flex', flexDirection: 'column', gap: '8px' },
     row: { display: 'flex', gap: '12px', alignItems: 'center' },
+    rowNumber: {
+        width: '24px', height: '24px', borderRadius: '50%',
+        background: 'rgba(0, 184, 217, 0.15)', color: '#00B8D9',
+        display: 'flex', alignItems: 'center', justifyContent: 'center',
+        fontSize: '11px', fontWeight: 600, flexShrink: 0
+    },
     input: {
         flex: 2, background: '#0A0E1A', border: '1px solid var(--color-border-subtle)',
         color: '#fff', padding: '8px 12px', borderRadius: '6px', fontSize: '14px', outline: 'none'

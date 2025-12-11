@@ -88,7 +88,7 @@ function getMockParts() {
   return [
     // POWER UNIT (8 parts)
     { id: 'pu-1', key: 'PIT-101', name: 'Power Unit ICE #1', pitlaneStatus: '🏁 Trackside', location: 'Garage 1', assignment: 'Car 1 (Albon)', life: 85, lastUpdated: new Date(now - 2 * day).toISOString(), lifeRemaining: 4, predictiveStatus: 'HEALTHY' },
-    { id: 'pu-2', key: 'PIT-102', name: 'Power Unit MGU-H #1', pitlaneStatus: '✈️ In Transit', location: 'DHL Cargo', assignment: 'Spares', life: 92, lastUpdated: new Date(now - 5 * day).toISOString(), lifeRemaining: 5, predictiveStatus: 'HEALTHY' },
+    { id: 'pu-2', key: 'PIT-102', name: 'Power Unit MGU-H #1', pitlaneStatus: '🚚 In Transit', location: 'DHL Cargo', assignment: 'Spares', life: 92, lastUpdated: new Date(now - 5 * day).toISOString(), lifeRemaining: 5, predictiveStatus: 'HEALTHY' },
     { id: 'pu-3', key: 'PIT-103', name: 'Power Unit MGU-K #1', pitlaneStatus: '🏁 Trackside', location: 'Garage 1', assignment: 'Car 1 (Albon)', life: 88, lastUpdated: new Date(now - 1 * day).toISOString(), lifeRemaining: 5, predictiveStatus: 'HEALTHY' },
     { id: 'pu-4', key: 'PIT-104', name: 'Power Unit Turbocharger #1', pitlaneStatus: '⚠️ DAMAGED', location: 'Quarantine', assignment: 'Unassigned', life: 15, lastUpdated: new Date(now - 8 * day).toISOString(), lifeRemaining: 0, predictiveStatus: 'CRITICAL' },
     { id: 'pu-5', key: 'PIT-105', name: 'Power Unit ICE #2', pitlaneStatus: '🏁 Trackside', location: 'Garage 2', assignment: 'Car 2 (Sainz)', life: 78, lastUpdated: new Date(now - 3 * day).toISOString(), lifeRemaining: 3, predictiveStatus: 'HEALTHY' },
@@ -100,7 +100,7 @@ function getMockParts() {
     { id: 'gb-1', key: 'PIT-201', name: 'Gearbox Casing Titanium #1', pitlaneStatus: '🏁 Trackside', location: 'Garage 2', assignment: 'Car 2 (Sainz)', life: 78, lastUpdated: new Date(now - 3 * day).toISOString(), lifeRemaining: 3, predictiveStatus: 'HEALTHY' },
     { id: 'gb-2', key: 'PIT-202', name: 'Gearbox Sequential Actuator', pitlaneStatus: '🏁 Trackside', location: 'Garage 2', assignment: 'Car 2 (Sainz)', life: 88, lastUpdated: new Date(now - 1 * day).toISOString(), lifeRemaining: 4, predictiveStatus: 'HEALTHY' },
     { id: 'gb-3', key: 'PIT-203', name: 'Gearbox Hydraulic System', pitlaneStatus: '🏁 Trackside', location: 'Garage 1', assignment: 'Car 1 (Albon)', life: 82, lastUpdated: new Date(now - 2 * day).toISOString(), lifeRemaining: 4, predictiveStatus: 'HEALTHY' },
-    { id: 'gb-4', key: 'PIT-204', name: 'Gearbox Oil Cooler', pitlaneStatus: '✈️ In Transit', location: 'DHL Cargo', assignment: 'Spares', life: 45, lastUpdated: new Date(now - 6 * day).toISOString(), lifeRemaining: 2, predictiveStatus: 'WARNING' },
+    { id: 'gb-4', key: 'PIT-204', name: 'Gearbox Oil Cooler', pitlaneStatus: '🚚 In Transit', location: 'DHL Cargo', assignment: 'Spares', life: 45, lastUpdated: new Date(now - 6 * day).toISOString(), lifeRemaining: 2, predictiveStatus: 'WARNING' },
     { id: 'gb-5', key: 'PIT-205', name: 'Gearbox Casing Titanium #2', pitlaneStatus: '🏭 Manufactured', location: 'Grove Factory', assignment: 'Spares', life: 100, lastUpdated: new Date(now - 15 * day).toISOString(), lifeRemaining: 6, predictiveStatus: 'HEALTHY' },
     { id: 'gb-6', key: 'PIT-206', name: 'Gearbox Differential', pitlaneStatus: '🏁 Trackside', location: 'Garage 1', assignment: 'Car 1 (Albon)', life: 55, lastUpdated: new Date(now - 4 * day).toISOString(), lifeRemaining: 2, predictiveStatus: 'WARNING' },
 
@@ -111,23 +111,23 @@ function getMockParts() {
     { id: 'fw-4', key: 'PIT-304', name: 'Front Wing Mainplane High DF', pitlaneStatus: '🏁 Trackside', location: 'Garage 2', assignment: 'Car 2 (Sainz)', life: 95, lastUpdated: new Date(now - 1 * day).toISOString(), lifeRemaining: 5, predictiveStatus: 'HEALTHY' },
     { id: 'fw-5', key: 'PIT-305', name: 'Front Wing Endplate Right', pitlaneStatus: '🏁 Trackside', location: 'Garage 2', assignment: 'Car 2 (Sainz)', life: 72, lastUpdated: new Date(now - 3 * day).toISOString(), lifeRemaining: 3, predictiveStatus: 'HEALTHY' },
     { id: 'fw-6', key: 'PIT-306', name: 'Front Wing Nose Cone', pitlaneStatus: '🏭 Manufactured', location: 'Grove Factory', assignment: 'Spares', life: 100, lastUpdated: new Date(now - 10 * day).toISOString(), lifeRemaining: 6, predictiveStatus: 'HEALTHY' },
-    { id: 'fw-7', key: 'PIT-307', name: 'Front Wing Cascade', pitlaneStatus: '✈️ In Transit', location: 'DHL Cargo', assignment: 'Spares', life: 90, lastUpdated: new Date(now - 4 * day).toISOString(), lifeRemaining: 5, predictiveStatus: 'HEALTHY' },
+    { id: 'fw-7', key: 'PIT-307', name: 'Front Wing Cascade', pitlaneStatus: '🚚 In Transit', location: 'DHL Cargo', assignment: 'Spares', life: 90, lastUpdated: new Date(now - 4 * day).toISOString(), lifeRemaining: 5, predictiveStatus: 'HEALTHY' },
     { id: 'fw-8', key: 'PIT-308', name: 'Front Wing Assembly FW47 #2', pitlaneStatus: '🏭 Manufactured', location: 'Grove Factory', assignment: 'Spares', life: 100, lastUpdated: new Date(now - 20 * day).toISOString(), lifeRemaining: 6, predictiveStatus: 'HEALTHY' },
     { id: 'fw-9', key: 'PIT-309', name: 'Front Wing Flap Lower', pitlaneStatus: '🏁 Trackside', location: 'Garage 2', assignment: 'Car 2 (Sainz)', life: 50, lastUpdated: new Date(now - 5 * day).toISOString(), lifeRemaining: 2, predictiveStatus: 'WARNING' },
 
     // AERO - REAR WING (7 parts)
     { id: 'rw-1', key: 'PIT-401', name: 'Rear Wing DRS Mainplane', pitlaneStatus: '🏁 Trackside', location: 'Garage 2', assignment: 'Car 2 (Sainz)', life: 40, lastUpdated: new Date(now - 1 * day).toISOString(), lifeRemaining: 1, predictiveStatus: 'WARNING' },
-    { id: 'rw-2', key: 'PIT-402', name: 'Rear Wing DRS Actuator', pitlaneStatus: '✈️ In Transit', location: 'DHL Cargo', assignment: 'Spares', life: 100, lastUpdated: new Date(now - 7 * day).toISOString(), lifeRemaining: 6, predictiveStatus: 'HEALTHY' },
+    { id: 'rw-2', key: 'PIT-402', name: 'Rear Wing DRS Actuator', pitlaneStatus: '🚚 In Transit', location: 'DHL Cargo', assignment: 'Spares', life: 100, lastUpdated: new Date(now - 7 * day).toISOString(), lifeRemaining: 6, predictiveStatus: 'HEALTHY' },
     { id: 'rw-3', key: 'PIT-403', name: 'Beam Wing Carbon', pitlaneStatus: '🏁 Trackside', location: 'Garage 1', assignment: 'Car 1 (Albon)', life: 70, lastUpdated: new Date(now - 2 * day).toISOString(), lifeRemaining: 3, predictiveStatus: 'HEALTHY' },
     { id: 'rw-4', key: 'PIT-404', name: 'Rear Wing Assembly FW47', pitlaneStatus: '🏁 Trackside', location: 'Garage 1', assignment: 'Car 1 (Albon)', life: 68, lastUpdated: new Date(now - 3 * day).toISOString(), lifeRemaining: 3, predictiveStatus: 'HEALTHY' },
     { id: 'rw-5', key: 'PIT-405', name: 'Rear Wing Endplate Left', pitlaneStatus: '🏭 Manufactured', location: 'Grove Factory', assignment: 'Spares', life: 100, lastUpdated: new Date(now - 12 * day).toISOString(), lifeRemaining: 6, predictiveStatus: 'HEALTHY' },
     { id: 'rw-6', key: 'PIT-406', name: 'Rear Wing Endplate Right', pitlaneStatus: '🏁 Trackside', location: 'Garage 2', assignment: 'Car 2 (Sainz)', life: 85, lastUpdated: new Date(now - 2 * day).toISOString(), lifeRemaining: 4, predictiveStatus: 'HEALTHY' },
-    { id: 'rw-7', key: 'PIT-407', name: 'Rear Wing Gurney Flap', pitlaneStatus: '✈️ In Transit', location: 'DHL Cargo', assignment: 'Spares', life: 95, lastUpdated: new Date(now - 3 * day).toISOString(), lifeRemaining: 5, predictiveStatus: 'HEALTHY' },
+    { id: 'rw-7', key: 'PIT-407', name: 'Rear Wing Gurney Flap', pitlaneStatus: '🚚 In Transit', location: 'DHL Cargo', assignment: 'Spares', life: 95, lastUpdated: new Date(now - 3 * day).toISOString(), lifeRemaining: 5, predictiveStatus: 'HEALTHY' },
 
     // FLOOR (5 parts)
     { id: 'fl-1', key: 'PIT-501', name: 'Floor Diffuser Carbon', pitlaneStatus: '🏁 Trackside', location: 'Garage 1', assignment: 'Car 1 (Albon)', life: 50, lastUpdated: new Date(now - 3 * day).toISOString(), lifeRemaining: 2, predictiveStatus: 'WARNING' },
     { id: 'fl-2', key: 'PIT-502', name: 'Floor Plank Wooden', pitlaneStatus: '🏁 Trackside', location: 'Garage 2', assignment: 'Car 2 (Sainz)', life: 35, lastUpdated: new Date(now - 10 * day).toISOString(), lifeRemaining: 1, predictiveStatus: 'WARNING' },
-    { id: 'fl-3', key: 'PIT-503', name: 'Floor Edge Wing', pitlaneStatus: '✈️ In Transit', location: 'DHL Cargo', assignment: 'Spares', life: 100, lastUpdated: new Date(now - 5 * day).toISOString(), lifeRemaining: 6, predictiveStatus: 'HEALTHY' },
+    { id: 'fl-3', key: 'PIT-503', name: 'Floor Edge Wing', pitlaneStatus: '🚚 In Transit', location: 'DHL Cargo', assignment: 'Spares', life: 100, lastUpdated: new Date(now - 5 * day).toISOString(), lifeRemaining: 6, predictiveStatus: 'HEALTHY' },
     { id: 'fl-4', key: 'PIT-504', name: 'Floor Diffuser Carbon #2', pitlaneStatus: '🏭 Manufactured', location: 'Grove Factory', assignment: 'Spares', life: 100, lastUpdated: new Date(now - 8 * day).toISOString(), lifeRemaining: 6, predictiveStatus: 'HEALTHY' },
     { id: 'fl-5', key: 'PIT-505', name: 'Floor Skid Block', pitlaneStatus: '🏁 Trackside', location: 'Garage 1', assignment: 'Car 1 (Albon)', life: 75, lastUpdated: new Date(now - 4 * day).toISOString(), lifeRemaining: 3, predictiveStatus: 'HEALTHY' },
 
@@ -146,7 +146,7 @@ function getMockParts() {
     // BRAKES (3 parts)
     { id: 'br-1', key: 'PIT-801', name: 'Brake Disc Front Carbon', pitlaneStatus: '🏁 Trackside', location: 'Garage 1', assignment: 'Car 1 (Albon)', life: 65, lastUpdated: new Date(now - 2 * day).toISOString(), lifeRemaining: 3, predictiveStatus: 'HEALTHY' },
     { id: 'br-2', key: 'PIT-802', name: 'Brake Disc Rear Carbon', pitlaneStatus: '🏁 Trackside', location: 'Garage 2', assignment: 'Car 2 (Sainz)', life: 58, lastUpdated: new Date(now - 3 * day).toISOString(), lifeRemaining: 2, predictiveStatus: 'WARNING' },
-    { id: 'br-3', key: 'PIT-803', name: 'Brake Caliper AP Racing', pitlaneStatus: '✈️ In Transit', location: 'DHL Cargo', assignment: 'Spares', life: 100, lastUpdated: new Date(now - 9 * day).toISOString(), lifeRemaining: 6, predictiveStatus: 'HEALTHY' },
+    { id: 'br-3', key: 'PIT-803', name: 'Brake Caliper AP Racing', pitlaneStatus: '🚚 In Transit', location: 'DHL Cargo', assignment: 'Spares', life: 100, lastUpdated: new Date(now - 9 * day).toISOString(), lifeRemaining: 6, predictiveStatus: 'HEALTHY' },
 
     // ELECTRONICS (3 parts)
     { id: 'el-1', key: 'PIT-901', name: 'Steering Wheel Electronics', pitlaneStatus: '🏁 Trackside', location: 'Garage 1', assignment: 'Car 1 (Albon)', life: 96, lastUpdated: new Date(now - 1 * day).toISOString(), lifeRemaining: 5, predictiveStatus: 'HEALTHY' },
@@ -511,7 +511,7 @@ export const handler = async (event, context) => {
         history.push({ id: uuid(), timestamp: new Date(lastUpdate - 10 * 86400000).toISOString(), status: 'QUALITY CHECK', note: 'Factory verification complete' });
         history.push({ id: uuid(), timestamp: new Date(lastUpdate - 15 * 86400000).toISOString(), status: 'RECEIVED', note: `Component logged - Serial: ${part.key}` });
 
-      } else if (part.pitlaneStatus === '✈️ In Transit') {
+      } else if (part.pitlaneStatus === '🚚 In Transit') {
         history.push({ id: uuid(), timestamp: new Date(lastUpdate).toISOString(), status: 'IN TRANSIT', note: `En route via ${part.location}` });
         history.push({ id: uuid(), timestamp: new Date(lastUpdate - 1 * 86400000).toISOString(), status: 'DISPATCHED', note: 'Shipped from Grove facility' });
         history.push({ id: uuid(), timestamp: new Date(lastUpdate - 4 * 86400000).toISOString(), status: 'QUALITY CHECK', note: 'Pre-shipment inspection passed' });
@@ -678,7 +678,7 @@ export const handler = async (event, context) => {
           });
         }
 
-        // 6. Shipping/transit events (for parts in transit or recently received)
+        // 6. Shipping/transit events (for parts In Transit or recently received)
         if (status.toLowerCase().includes('transit') || daysAgo < 30) {
           daysAgo += Math.floor(Math.random() * 4) + 2; // 2-5 days
           history.push({
@@ -746,13 +746,22 @@ export const handler = async (event, context) => {
     }
 
     if (functionKey === 'setRaceCalendar') {
-      const calendar = event.calendar || event.payload?.calendar;
+      // Extract calendar from various possible locations
+      const calendar = event.calendar ||
+        event.payload?.calendar ||
+        event.call?.calendar ||
+        event.call?.payload?.calendar ||
+        (typeof event.call === 'object' && event.call.calendar);
+
+      console.log('[setRaceCalendar] Received event:', JSON.stringify(event));
+      console.log('[setRaceCalendar] Extracted calendar:', calendar);
+
       if (calendar && Array.isArray(calendar)) {
         await storage.set('raceCalendar', calendar);
         console.log('[setRaceCalendar] Saved calendar:', calendar.length, 'races');
         return { success: true, count: calendar.length };
       }
-      return { success: false, error: 'Invalid calendar data' };
+      return { success: false, error: 'Invalid calendar data - received: ' + typeof calendar };
     }
 
     if (functionKey === 'rovoGetDriverAssignments' || functionKey === 'get-driver-assignments') {
@@ -928,8 +937,24 @@ export const handler = async (event, context) => {
         life: partData.life || 100,
         lastUpdated: new Date().toISOString(),
         createdAt: new Date().toISOString(), // Track creation time
-        lifeRemaining: 6,
-        predictiveStatus: 'HEALTHY',
+        // Calculate lifeRemaining based on category and initial life (F1 2024 regulations)
+        lifeRemaining: (() => {
+          const lifePercent = parseInt(partData.life) || 100;
+          // Max races based on F1 category (2024 season regulations)
+          let maxRaces = 6; // Default
+          const catLower = autoCategory.toLowerCase();
+          if (catLower.includes('power unit') || catLower.includes('ice') || catLower.includes('mgu')) maxRaces = 6;
+          else if (catLower.includes('gearbox')) maxRaces = 5;
+          else if (catLower.includes('battery') || catLower.includes('energy store') || catLower.includes('control electronics')) maxRaces = 12;
+          else if (catLower.includes('exhaust')) maxRaces = 3;
+          else if (catLower.includes('wing') || catLower.includes('floor') || catLower.includes('aero')) maxRaces = 4;
+          else if (catLower.includes('brake') || catLower.includes('suspension')) maxRaces = 3;
+          else if (catLower.includes('wheel')) maxRaces = 5;
+          // Calculate remaining races based on life percentage
+          return Math.max(0, Math.round((lifePercent / 100) * maxRaces));
+        })(),
+        predictiveStatus: (partData.life && parseInt(partData.life) < 30) ? 'CRITICAL' :
+          (partData.life && parseInt(partData.life) < 50) ? 'WARNING' : 'HEALTHY',
         isNew: true // Flag for Recent Activity
       };
 
@@ -967,12 +992,69 @@ export const handler = async (event, context) => {
       };
     }
 
+    // PERMANENTLY DELETE a part from inventory (only for retired/scrapped parts)
+    if (functionKey === 'deletePart') {
+      const partKey = event.partKey || event.payload?.partKey || event.call?.payload?.partKey;
+      console.log('[deletePart] Deleting part:', partKey);
+
+      if (!partKey) {
+        return { success: false, error: 'Missing part key' };
+      }
+
+      // Extract mode from frontend (takes precedence over storage)
+      const passedMode = event.appMode ||
+        event.payload?.appMode ||
+        event.call?.payload?.appMode;
+      const effectiveMode = passedMode || currentAppMode;
+
+      // PROD MODE: Delete from storage
+      if (effectiveMode === 'PROD') {
+        try {
+          const inventory = await storage.get('inventory') || [];
+          const partIndex = inventory.findIndex(p => p.key === partKey);
+
+          if (partIndex < 0) {
+            return { success: false, error: 'Part not found in inventory' };
+          }
+
+          const part = inventory[partIndex];
+          const statusLower = (part.pitlaneStatus || '').toLowerCase();
+
+          // Safety check: Only allow deletion of retired/scrapped parts
+          if (!statusLower.includes('retired') && !statusLower.includes('scrap')) {
+            return { success: false, error: 'Only RETIRED parts can be permanently deleted' };
+          }
+
+          // Remove from inventory
+          inventory.splice(partIndex, 1);
+          await storage.set('inventory', inventory);
+
+          // Also delete part history
+          await storage.delete(`partHistory_${partKey}`);
+
+          console.log('[deletePart] PROD: Part permanently deleted. Remaining:', inventory.length);
+        } catch (storageError) {
+          console.error('[deletePart] Storage error:', storageError);
+          return { success: false, error: 'Failed to delete part: ' + storageError.message };
+        }
+      } else {
+        // DEMO MODE: Ephemeral, just log success
+        console.log('[deletePart] DEMO: Part deleted (ephemeral)');
+      }
+
+      return {
+        success: true,
+        status: 'SUCCESS',
+        message: 'Part permanently deleted from inventory.'
+      };
+    }
+
     if (functionKey === 'rovoUpdatePartStatus' || functionKey === 'update-part-status') {
       return { status: 'SUCCESS', message: `Part status updated to ${event.status || 'requested status'}.` };
     }
 
     if (functionKey === 'rovoGenerateHandoverReport' || functionKey === 'generate-handover-report') {
-      return { report: 'Shift Handover: All cars prepped. PIT-104 requires inspection. 3 parts in transit.' };
+      return { report: 'Shift Handover: All cars prepped. PIT-104 requires inspection. 3 parts In Transit.' };
     }
 
     if (functionKey === 'rovoGetRaceWeekendContext' || functionKey === 'get-race-weekend-context') {

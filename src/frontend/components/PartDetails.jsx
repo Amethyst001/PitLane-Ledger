@@ -132,6 +132,18 @@ const PartDetails = ({ issueId, issueKey, onClose, appMode, onReturn, onScanAnot
     };
 
     const handleLogEvent = async ({ status, note, assignment }) => {
+        // --- VALIDATION BEFORE OPTIMISTIC UPDATE ---
+        const partKey = currentPartKey || issueKey;
+        const currentPart = allParts.find(p => p.key === partKey);
+        const currentStatus = (currentPart?.pitlaneStatus || '').toLowerCase();
+
+        // Validate "Clear for Race" - must not be damaged
+        if (status.toLowerCase().includes('cleared') && status.toLowerCase().includes('race')) {
+            if (currentStatus.includes('damage') || currentStatus.includes('quarantine') || currentStatus.includes('repair')) {
+                throw new Error('Cannot clear a DAMAGED part for race. Please send the part for maintenance or repair first.');
+            }
+        }
+
         // OPTIMISTIC UI: Update state immediately for instant feedback
         const optimisticEvent = {
             id: `temp-${Date.now()}`,
@@ -144,7 +156,6 @@ const PartDetails = ({ issueId, issueKey, onClose, appMode, onReturn, onScanAnot
         setHistory(prev => [optimisticEvent, ...(prev || [])]);
 
         // Immediately update part status (and assignment if provided) in local state (optimistic)
-        const partKey = currentPartKey || issueKey;
         setAllParts(prev => prev.map(p =>
             p.key === partKey
                 ? {
@@ -157,6 +168,40 @@ const PartDetails = ({ issueId, issueKey, onClose, appMode, onReturn, onScanAnot
         ));
 
         try {
+            // SPECIAL CASE: Permanent delete (from retired parts modal)
+            if (status === '__DELETE__') {
+                const deleteResult = await invoke('deletePart', {
+                    key: 'deletePart',
+                    partKey: partKey,
+                    appMode
+                });
+
+                if (deleteResult?.success) {
+                    // Remove from local state
+                    setAllParts(prev => prev.filter(p => p.key !== partKey));
+
+                    // DEMO MODE: Also remove from sessionStorage
+                    if (appMode === 'DEMO') {
+                        const cachedParts = sessionStorage.getItem('pitlane_demo_parts');
+                        if (cachedParts) {
+                            const currentParts = JSON.parse(cachedParts);
+                            const updatedParts = currentParts.filter(p => p.key !== partKey);
+                            sessionStorage.setItem('pitlane_demo_parts', JSON.stringify(updatedParts));
+                            window.dispatchEvent(new CustomEvent('pitlane:demo-parts-updated', {
+                                detail: { parts: updatedParts }
+                            }));
+                        }
+                    }
+
+                    // Navigate back to inventory
+                    if (onEventLogged) onEventLogged();
+                    if (onClose) onClose();
+                } else {
+                    throw new Error(deleteResult?.error || 'Failed to delete part');
+                }
+                return;
+            }
+
             // Fire off the resolver (backend will persist)
             const result = await invoke('logEvent', {
                 key: 'logEvent',
@@ -181,8 +226,27 @@ const PartDetails = ({ issueId, issueKey, onClose, appMode, onReturn, onScanAnot
                 ));
             }
 
-            // Trigger system-wide refresh in parent (for Dashboard to update)
-            if (onEventLogged) onEventLogged();
+            // DEMO MODE: Sync changes to sessionStorage to persist within session
+            // Read from sessionStorage directly to avoid stale closure
+            if (appMode === 'DEMO') {
+                const cachedParts = sessionStorage.getItem('pitlane_demo_parts');
+                if (cachedParts) {
+                    const currentParts = JSON.parse(cachedParts);
+                    const updatedParts = currentParts.map(p =>
+                        p.key === partKey ? { ...p, pitlaneStatus: status, assignment: assignment || p.assignment, lastUpdated: new Date().toISOString() } : p
+                    );
+                    sessionStorage.setItem('pitlane_demo_parts', JSON.stringify(updatedParts));
+                    console.log('[PartDetails] DEMO: Synced updated parts to session');
+
+                    // Dispatch event for Dashboard to update its local state (no backend fetch needed)
+                    window.dispatchEvent(new CustomEvent('pitlane:demo-parts-updated', {
+                        detail: { parts: updatedParts }
+                    }));
+                }
+            }
+
+            // Trigger system-wide refresh in parent (for Dashboard to update) - PROD only
+            if (onEventLogged && appMode !== 'DEMO') onEventLogged();
 
         } catch (error) {
             // ROLLBACK: Revert optimistic updates on failure
@@ -408,7 +472,9 @@ const PartDetails = ({ issueId, issueKey, onClose, appMode, onReturn, onScanAnot
                 isOpen={showLogModal}
                 onClose={() => setShowLogModal(false)}
                 onSubmit={handleLogEvent}
-                issueId={issueKey || issueId}
+                issueId={currentPartId}
+                issueKey={currentPartKey || issueKey}
+                partName={allParts.find(p => p.key === currentPartKey)?.name}
                 currentStatus={allParts.find(p => p.key === currentPartKey)?.pitlaneStatus}
                 currentAssignment={allParts.find(p => p.key === currentPartKey)?.assignment}
             />

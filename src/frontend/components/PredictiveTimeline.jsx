@@ -247,6 +247,7 @@ const styles = {
         display: 'flex',
         flexDirection: 'column',
         gap: '8px',
+        marginBottom: '8px',
     },
     eolItem: {
         padding: '10px 12px',

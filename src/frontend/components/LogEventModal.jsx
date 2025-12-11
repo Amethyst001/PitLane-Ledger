@@ -10,7 +10,8 @@ const STATUS_PRESETS = [
     { value: '✅ Cleared for Race', label: '✅ Cleared for Race' },
     { value: '⚠️ DAMAGED', label: '⚠️ DAMAGED' },
     { value: '🔧 Maintenance', label: '🔧 Maintenance' },
-    { value: '🚚 In Transit', label: '🚚 In Transit' }
+    { value: '🚚 In Transit', label: '🚚 In Transit' },
+    { value: '📦 RETIRED', label: '📦 RETIRED' }
 ];
 
 const ASSIGNMENT_OPTIONS = [
@@ -173,7 +174,204 @@ const LogEventModal = ({ isOpen, onClose, onSubmit, issueId, issueKey, partName,
         }
     };
 
+    // Check if the current part is retired
+    const isRetired = currentStatus && (currentStatus.toLowerCase().includes('retired') || currentStatus.toLowerCase().includes('scrapped'));
+
     if (!isOpen) return null;
+
+    // SPECIAL UI FOR RETIRED PARTS - Premium design matching app aesthetic
+    if (isRetired) {
+        return (
+            <div style={styles.overlay} onClick={onClose}>
+                <div style={{
+                    ...styles.modal,
+                    maxWidth: '420px',
+                    background: 'var(--glass-bg)',
+                    backdropFilter: 'blur(18px) saturate(180%)',
+                    WebkitBackdropFilter: 'blur(18px) saturate(180%)',
+                    border: '1px solid var(--glass-border)',
+                    boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 40px rgba(0, 184, 217, 0.1)'
+                }} onClick={(e) => e.stopPropagation()}>
+                    {/* Header with subtle gradient accent */}
+                    <div style={{
+                        padding: '24px 24px 16px',
+                        borderBottom: '1px solid var(--color-border-subtle)',
+                        background: 'linear-gradient(180deg, rgba(100, 116, 139, 0.1) 0%, transparent 100%)'
+                    }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                            <div>
+                                <div style={{
+                                    display: 'inline-block',
+                                    padding: '4px 10px',
+                                    background: 'rgba(100, 116, 139, 0.2)',
+                                    borderRadius: '4px',
+                                    fontSize: '11px',
+                                    fontWeight: '600',
+                                    color: '#94A3B8',
+                                    letterSpacing: '0.5px',
+                                    marginBottom: '8px'
+                                }}>
+                                    RETIRED PART
+                                </div>
+                                <h2 style={{
+                                    ...styles.modalTitle,
+                                    fontSize: '18px',
+                                    marginBottom: '4px'
+                                }}>{partName || issueKey || issueId}</h2>
+                                <p style={{
+                                    fontSize: '13px',
+                                    color: 'var(--color-text-muted)',
+                                    margin: 0,
+                                    fontFamily: 'var(--font-mono)'
+                                }}>{issueKey || issueId}</p>
+                            </div>
+                            <button style={{
+                                ...styles.closeButton,
+                                background: 'rgba(100, 116, 139, 0.15)',
+                                borderRadius: '8px',
+                                width: '32px',
+                                height: '32px'
+                            }} onClick={onClose} aria-label="Close">
+                                <X size={16} />
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Action Cards */}
+                    <div style={{ padding: '20px 24px 24px', display: 'flex', flexDirection: 'column', gap: '12px' }}>
+
+                        {/* Refurbish Card */}
+                        <button
+                            onClick={async () => {
+                                setIsSubmitting(true);
+                                try {
+                                    await onSubmit({ status: '🔄 Refurbished', note: 'Part refurbished and returned to active inventory' });
+                                    onClose();
+                                } catch (error) {
+                                    console.error('Error refurbishing part:', error);
+                                } finally {
+                                    setIsSubmitting(false);
+                                }
+                            }}
+                            disabled={isSubmitting}
+                            style={{
+                                padding: '16px 20px',
+                                background: 'linear-gradient(135deg, rgba(0, 184, 217, 0.15), rgba(0, 208, 132, 0.1))',
+                                border: '1px solid rgba(0, 184, 217, 0.3)',
+                                borderRadius: '12px',
+                                cursor: 'pointer',
+                                textAlign: 'left',
+                                transition: 'all 0.2s ease',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '16px'
+                            }}
+                        >
+                            <div style={{
+                                width: '44px',
+                                height: '44px',
+                                borderRadius: '10px',
+                                background: 'linear-gradient(135deg, #00B8D9, #00D084)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                flexShrink: 0
+                            }}>
+                                <ChevronUp size={22} color="white" />
+                            </div>
+                            <div>
+                                <div style={{
+                                    fontSize: '15px',
+                                    fontWeight: '600',
+                                    color: '#00D084',
+                                    marginBottom: '2px'
+                                }}>Refurbish Part</div>
+                                <div style={{
+                                    fontSize: '12px',
+                                    color: 'var(--color-text-muted)'
+                                }}>Return to active inventory for reuse</div>
+                            </div>
+                        </button>
+
+                        {/* Delete Card */}
+                        <button
+                            onClick={async () => {
+                                if (!window.confirm(`Are you sure you want to PERMANENTLY DELETE ${issueKey || issueId}?\n\nThis will remove all history and cannot be undone.`)) {
+                                    return;
+                                }
+                                setIsSubmitting(true);
+                                try {
+                                    await onSubmit({ status: '__DELETE__', note: 'Part permanently deleted from inventory' });
+                                    onClose();
+                                } catch (error) {
+                                    console.error('Error deleting part:', error);
+                                } finally {
+                                    setIsSubmitting(false);
+                                }
+                            }}
+                            disabled={isSubmitting}
+                            style={{
+                                padding: '16px 20px',
+                                background: 'rgba(240, 68, 56, 0.08)',
+                                border: '1px solid rgba(240, 68, 56, 0.25)',
+                                borderRadius: '12px',
+                                cursor: 'pointer',
+                                textAlign: 'left',
+                                transition: 'all 0.2s ease',
+                                display: 'flex',
+                                alignItems: 'center',
+                                gap: '16px'
+                            }}
+                        >
+                            <div style={{
+                                width: '44px',
+                                height: '44px',
+                                borderRadius: '10px',
+                                background: 'rgba(240, 68, 56, 0.15)',
+                                border: '1px solid rgba(240, 68, 56, 0.3)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                flexShrink: 0
+                            }}>
+                                <X size={20} color="#F04438" />
+                            </div>
+                            <div>
+                                <div style={{
+                                    fontSize: '15px',
+                                    fontWeight: '600',
+                                    color: '#F04438',
+                                    marginBottom: '2px'
+                                }}>Permanently Delete</div>
+                                <div style={{
+                                    fontSize: '12px',
+                                    color: 'var(--color-text-muted)'
+                                }}>Remove from inventory (irreversible)</div>
+                            </div>
+                        </button>
+
+                        {/* Cancel link */}
+                        <button
+                            onClick={onClose}
+                            style={{
+                                marginTop: '8px',
+                                padding: '10px',
+                                background: 'transparent',
+                                border: 'none',
+                                borderRadius: '8px',
+                                cursor: 'pointer',
+                                fontSize: '13px',
+                                color: 'var(--color-text-muted)',
+                                fontWeight: '500'
+                            }}
+                        >
+                            Cancel
+                        </button>
+                    </div>
+                </div>
+            </div>
+        );
+    }
 
     return (
         <div style={styles.overlay} onClick={onClose}>
@@ -205,7 +403,6 @@ const LogEventModal = ({ isOpen, onClose, onSubmit, issueId, issueKey, partName,
                             alignItems: 'center',
                             gap: '10px'
                         }}>
-                            <span>{validationError.type === 'error' ? '⚠️' : 'ℹ️'}</span>
                             <span>{validationError.message}</span>
                         </div>
                     )}
@@ -221,7 +418,7 @@ const LogEventModal = ({ isOpen, onClose, onSubmit, issueId, issueKey, partName,
                             color: '#F79009'
                         }}>
                             <div style={{ marginBottom: '12px', fontSize: '13px' }}>
-                                ⚠️ {pendingConfirm.message}
+                                {pendingConfirm.message}
                             </div>
                             <div style={{ display: 'flex', gap: '8px' }}>
                                 <button

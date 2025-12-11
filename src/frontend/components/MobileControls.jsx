@@ -1,10 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { invoke } from '@forge/bridge';
-import { CheckCircle, AlertTriangle, ArrowLeft, Plus, QrCode, X, List } from 'lucide-react';
+import { CheckCircle, AlertTriangle, ArrowLeft, Plus, QrCode, X, List, Trash2 } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 import QrScanner from 'qr-scanner'; // Nimiq - primary scanner with WebWorker
 
-const MobileControls = ({ issueId, onReturn, onEventLogged, appMode, initialView, onScanSwitch, allParts }) => {
+const MobileControls = ({ issueId, onReturn, onEventLogged, appMode, initialView, onScanSwitch, allParts, driverNames }) => {
     const [isLogging, setIsLogging] = useState(false);
     const [showSuccess, setShowSuccess] = useState(false);
     const [lastAction, setLastAction] = useState('');
@@ -15,8 +15,16 @@ const MobileControls = ({ issueId, onReturn, onEventLogged, appMode, initialView
     const [qrPrintStats, setQRPrintStats] = useState({ lastPrint: null, lastCount: 0, currentCount: 0 });
     const [expandedFields, setExpandedFields] = useState(false); // Toggle for extra fields
     const [internalParts, setInternalParts] = useState([]); // Fallback if allParts prop is missing
+    const [internalDriverNames, setInternalDriverNames] = useState({ car1: 'Driver 1', car2: 'Driver 2' });
 
-    // Load Data (QR history + Parts) on mount
+    // Floating error message (bottom of screen, modern style)
+    const [floatingError, setFloatingError] = useState(null);
+
+    // Undo toast state
+    const [undoToast, setUndoToast] = useState(null); // { issueId, previousStatus, countdown }
+    const undoTimeoutRef = useRef(null);
+
+    // Load Data (QR history + Parts + DriverNames) on mount
     useEffect(() => {
         const loadData = async () => {
             try {
@@ -32,46 +40,57 @@ const MobileControls = ({ issueId, onReturn, onEventLogged, appMode, initialView
                 const parts = await invoke(resolver);
                 setInternalParts(parts || []);
                 setQRPrintStats(prev => ({ ...prev, currentCount: parts?.length || 0 }));
+
+                // Driver Names (from fleet config OR fallback)
+                if (!driverNames) {
+                    const fleetConfig = await invoke('getFleetConfig', { key: 'getFleetConfig' });
+                    if (fleetConfig && fleetConfig.car1 && fleetConfig.car1 !== 'Car 1') {
+                        setInternalDriverNames({ car1: fleetConfig.car1, car2: fleetConfig.car2 });
+                    } else if (appMode === 'DEMO') {
+                        setInternalDriverNames({ car1: 'Alex Albon', car2: 'Carlos Sainz' });
+                    }
+                }
             } catch (error) {
                 console.error('Failed to load mobile data:', error);
             }
         };
         loadData();
-    }, [appMode]);
+    }, [appMode, driverNames]);
 
     const handleQuickLog = async (status) => {
         setIsLogging(true);
+        setFloatingError(null); // Clear any previous error
 
         // --- WORKFLOW VALIDATION ---
         // Get current part info for validation
         const partsList = allParts || internalParts;
         const currentPart = issueId ? partsList.find(p => p.key === issueId || p.id === issueId) : null;
         const currentStatus = currentPart?.pitlaneStatus?.toLowerCase() || '';
+        const previousStatus = currentPart?.pitlaneStatus || '🏁 Trackside'; // Save for undo
 
         // Validate "Clear for Race"
         if (status.includes('Cleared for Race') || status.includes('Clear for Race')) {
             // Block if part is damaged
             if (currentStatus.includes('damage') || currentStatus.includes('quarantine') || currentStatus.includes('repair')) {
-                setScanError('⚠️ Cannot clear a DAMAGED part for race. Please repair first.');
+                setFloatingError('Cannot clear a DAMAGED part for race. Please repair first.');
                 setIsLogging(false);
                 return;
             }
             // Block if part is not trackside
-            if (!currentStatus.includes('trackside') && !currentStatus.includes('garage') && !currentStatus.includes('ready')) {
-                setScanError(`⚠️ Part is not trackside (Status: ${currentPart?.pitlaneStatus}). Cannot clear for race.`);
+            if (!currentStatus.includes('trackside') && !currentStatus.includes('garage') && !currentStatus.includes('ready') && !currentStatus.includes('cleared')) {
+                setFloatingError(`Part is not trackside (Status: ${currentPart?.pitlaneStatus}). Cannot clear for race.`);
                 setIsLogging(false);
                 return;
             }
             // Block if already cleared
             if (currentStatus.includes('cleared') && currentStatus.includes('race')) {
-                setScanError('ℹ️ Part already cleared for race.');
+                setFloatingError('Part already cleared for race.');
                 setIsLogging(false);
                 return;
             }
         }
 
-        // Validate "Log Damage" - warn but allow (can damage any part)
-        // No blocking needed, just proceed
+        // No validation for Log Damage - anything can be damaged
 
         try {
             await invoke('logEvent', {
@@ -82,14 +101,207 @@ const MobileControls = ({ issueId, onReturn, onEventLogged, appMode, initialView
                 appMode
             });
 
+            // DEMO MODE: Sync changes to sessionStorage to persist within session
+            if (appMode === 'DEMO') {
+                const cachedParts = sessionStorage.getItem('pitlane_demo_parts');
+                if (cachedParts) {
+                    const parts = JSON.parse(cachedParts);
+                    const updatedParts = parts.map(p =>
+                        p.key === issueId ? { ...p, pitlaneStatus: status, lastUpdated: new Date().toISOString() } : p
+                    );
+                    sessionStorage.setItem('pitlane_demo_parts', JSON.stringify(updatedParts));
+                    console.log('[MobileControls] DEMO: Synced updated parts to session');
+
+                    // Dispatch event for Dashboard to update its local state
+                    window.dispatchEvent(new CustomEvent('pitlane:demo-parts-updated', {
+                        detail: { parts: updatedParts }
+                    }));
+                }
+            }
+
             setLastAction(status);
             setShowSuccess(true);
             setTimeout(() => setShowSuccess(false), 2500);
 
-            if (onEventLogged) onEventLogged();
+            // Show Undo toast for DAMAGED status (5-second countdown)
+            if (status.toLowerCase().includes('damage')) {
+                // Clear any existing undo timeout
+                if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
+
+                setUndoToast({
+                    issueId,
+                    previousStatus,
+                    partKey: currentPart?.key || issueId,
+                    countdown: 5
+                });
+
+                // Start countdown
+                let count = 5;
+                const countdownInterval = setInterval(() => {
+                    count--;
+                    if (count <= 0) {
+                        clearInterval(countdownInterval);
+                        setUndoToast(null);
+                    } else {
+                        setUndoToast(prev => prev ? { ...prev, countdown: count } : null);
+                    }
+                }, 1000);
+
+                undoTimeoutRef.current = setTimeout(() => {
+                    clearInterval(countdownInterval);
+                    setUndoToast(null);
+                }, 5000);
+            }
+
+            // Only trigger backend refresh for PROD mode
+            if (onEventLogged && appMode !== 'DEMO') onEventLogged();
         } catch (error) {
             console.error('Error logging event:', error);
-            setScanError('Failed to log event. Please try again.');
+            setFloatingError('Failed to log event. Please try again.');
+        } finally {
+            setIsLogging(false);
+        }
+    };
+
+    // Handle Undo action
+    const handleUndo = async () => {
+        if (!undoToast) return;
+
+        const { issueId: undoIssueId, previousStatus, partKey } = undoToast;
+
+        // Clear the undo toast
+        if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
+        setUndoToast(null);
+
+        // Revert to previous status
+        try {
+            await invoke('logEvent', {
+                key: 'logEvent',
+                issueId: undoIssueId,
+                status: previousStatus,
+                note: `Undo: Reverted from DAMAGED at ${new Date().toLocaleTimeString()}`,
+                appMode
+            });
+
+            // DEMO MODE: Sync undo to sessionStorage
+            if (appMode === 'DEMO') {
+                const cachedParts = sessionStorage.getItem('pitlane_demo_parts');
+                if (cachedParts) {
+                    const parts = JSON.parse(cachedParts);
+                    const updatedParts = parts.map(p =>
+                        p.key === undoIssueId ? { ...p, pitlaneStatus: previousStatus, lastUpdated: new Date().toISOString() } : p
+                    );
+                    sessionStorage.setItem('pitlane_demo_parts', JSON.stringify(updatedParts));
+                    window.dispatchEvent(new CustomEvent('pitlane:demo-parts-updated', {
+                        detail: { parts: updatedParts }
+                    }));
+                }
+            }
+
+            setLastAction(`Undone - Reverted to ${previousStatus}`);
+            setShowSuccess(true);
+            setTimeout(() => setShowSuccess(false), 2500);
+
+            if (onEventLogged && appMode !== 'DEMO') onEventLogged();
+        } catch (error) {
+            console.error('Undo failed:', error);
+            setFloatingError('Failed to undo. Please try again.');
+        }
+    };
+
+    // Quick log from scan result - uses the scanned part key directly
+    const handleQuickLogFromScan = async (partKey, status) => {
+        // Set issueId temporarily for the log
+        const partsList = allParts || internalParts;
+        const part = partsList.find(p => p.key === partKey);
+
+        if (!part) {
+            setFloatingError(`Part ${partKey} not found in inventory.`);
+            return;
+        }
+
+        // Close scanner and log the event
+        setShowScanner(false);
+        setScanResult(null);
+
+        // Use the handleQuickLog logic but with explicit issueId
+        setIsLogging(true);
+        setFloatingError(null);
+
+        const currentStatus = (part.pitlaneStatus || '').toLowerCase();
+        const previousStatus = part.pitlaneStatus || '🏁 Trackside';
+
+        // Validate Clear for Race
+        if (status.includes('Cleared for Race')) {
+            if (currentStatus.includes('damage') || currentStatus.includes('quarantine') || currentStatus.includes('repair')) {
+                setFloatingError('Cannot clear a DAMAGED part for race. Please repair first.');
+                setIsLogging(false);
+                return;
+            }
+            if (!currentStatus.includes('trackside') && !currentStatus.includes('garage') && !currentStatus.includes('ready') && !currentStatus.includes('cleared')) {
+                setFloatingError(`Part is not trackside (Status: ${part.pitlaneStatus}). Cannot clear for race.`);
+                setIsLogging(false);
+                return;
+            }
+            if (currentStatus.includes('cleared') && currentStatus.includes('race')) {
+                setFloatingError('Part already cleared for race.');
+                setIsLogging(false);
+                return;
+            }
+        }
+
+        try {
+            await invoke('logEvent', {
+                key: 'logEvent',
+                issueId: partKey,
+                status,
+                note: `Quick log from QR scan at ${new Date().toLocaleTimeString()}`,
+                appMode
+            });
+
+            // DEMO MODE: Sync to sessionStorage
+            if (appMode === 'DEMO') {
+                const cachedParts = sessionStorage.getItem('pitlane_demo_parts');
+                if (cachedParts) {
+                    const parts = JSON.parse(cachedParts);
+                    const updatedParts = parts.map(p =>
+                        p.key === partKey ? { ...p, pitlaneStatus: status, lastUpdated: new Date().toISOString() } : p
+                    );
+                    sessionStorage.setItem('pitlane_demo_parts', JSON.stringify(updatedParts));
+                    window.dispatchEvent(new CustomEvent('pitlane:demo-parts-updated', {
+                        detail: { parts: updatedParts }
+                    }));
+                }
+            }
+
+            setLastAction(status);
+            setShowSuccess(true);
+            setTimeout(() => setShowSuccess(false), 2500);
+
+            // Show Undo toast for DAMAGED
+            if (status.toLowerCase().includes('damage')) {
+                if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
+                setUndoToast({ issueId: partKey, previousStatus, partKey, countdown: 5 });
+                let count = 5;
+                const countdownInterval = setInterval(() => {
+                    count--;
+                    if (count <= 0) {
+                        clearInterval(countdownInterval);
+                        setUndoToast(null);
+                    } else {
+                        setUndoToast(prev => prev ? { ...prev, countdown: count } : null);
+                    }
+                }, 1000);
+                undoTimeoutRef.current = setTimeout(() => {
+                    clearInterval(countdownInterval);
+                    setUndoToast(null);
+                }, 5000);
+            }
+
+            if (onEventLogged && appMode !== 'DEMO') onEventLogged();
+        } catch (error) {
+            console.error('Error logging from scan:', error);
+            setFloatingError('Failed to log event. Please try again.');
         } finally {
             setIsLogging(false);
         }
@@ -337,16 +549,18 @@ const MobileControls = ({ issueId, onReturn, onEventLogged, appMode, initialView
                 console.warn('[Scanner] Could not refresh parts list:', e);
             }
 
-            const exists = partsList && partsList.some(p => p.key === targetKey);
+            const existingPart = partsList && partsList.find(p => p.key === targetKey);
+            const exists = !!existingPart;
 
             setScanResult({
                 type: 'internal',
                 text: targetKey,
-                exists: !!exists,
-                format: formatDisplay
+                exists: exists,
+                format: formatDisplay,
+                partInfo: existingPart || null
             });
         } else {
-            setScanResult({ type: 'external', text: decodedText, format: formatDisplay });
+            setScanResult({ type: 'external', text: decodedText, format: formatDisplay, partInfo: null });
         }
     };
 
@@ -602,6 +816,10 @@ const MobileControls = ({ issueId, onReturn, onEventLogged, appMode, initialView
                         <QrCode size={20} />
                         <span>Print QR</span>
                     </button>
+                    <button onClick={() => handleQuickLog('📦 RETIRED')} disabled={isLogging} style={{ ...styles.secondaryButton, color: '#64748B', borderColor: 'rgba(100, 116, 139, 0.3)' }}>
+                        <Trash2 size={20} />
+                        <span>Retire</span>
+                    </button>
                 </div>
 
                 {/* Browse Inventory - Navigate to PartDetails view */}
@@ -711,8 +929,12 @@ const MobileControls = ({ issueId, onReturn, onEventLogged, appMode, initialView
                                     onChange={e => setNewPart({ ...newPart, assignment: e.target.value })}
                                 >
                                     <option value="Spares">Spares</option>
-                                    <option value="Car 1 (Albon)">Car 1 (Albon)</option>
-                                    <option value="Car 2 (Sainz)">Car 2 (Sainz)</option>
+                                    <option value={`Car 1 (${(driverNames || internalDriverNames)?.car1?.split(' ').pop() || 'Driver 1'})`}>
+                                        Car 1 ({(driverNames || internalDriverNames)?.car1?.split(' ').pop() || 'Driver 1'})
+                                    </option>
+                                    <option value={`Car 2 (${(driverNames || internalDriverNames)?.car2?.split(' ').pop() || 'Driver 2'})`}>
+                                        Car 2 ({(driverNames || internalDriverNames)?.car2?.split(' ').pop() || 'Driver 2'})
+                                    </option>
                                 </select>
                             </div>
                         </div>
@@ -881,12 +1103,43 @@ const MobileControls = ({ issueId, onReturn, onEventLogged, appMode, initialView
                                             DETECTED • {scanResult.format || 'QR CODE'}
                                         </div>
                                         <div style={{ color: 'white', fontWeight: 'bold', fontSize: '16px' }}>{scanResult.text}</div>
+                                        {scanResult.partInfo && (
+                                            <div style={{ color: '#64748B', fontSize: '12px', marginTop: '2px' }}>
+                                                Current: {scanResult.partInfo.pitlaneStatus?.replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]/gu, '').trim()}
+                                            </div>
+                                        )}
                                     </div>
                                 </div>
+
+                                {/* Smart Actions - Primary quick actions */}
+                                {scanResult.type === 'internal' && scanResult.exists && (
+                                    <div style={{ marginBottom: '12px' }}>
+                                        <div style={{ fontSize: '11px', color: '#64748B', marginBottom: '8px', textTransform: 'uppercase' }}>Quick Actions</div>
+                                        <div style={{ display: 'flex', gap: '8px' }}>
+                                            <button
+                                                onClick={() => {
+                                                    handleQuickLogFromScan(scanResult.text, '✅ Cleared for Race');
+                                                }}
+                                                style={{ ...styles.primaryBtn, flex: 1, background: 'rgba(0, 208, 132, 0.15)', color: '#00D084', border: '1px solid rgba(0, 208, 132, 0.3)' }}
+                                            >
+                                                <CheckCircle size={16} /> Clear for Race
+                                            </button>
+                                            <button
+                                                onClick={() => {
+                                                    handleQuickLogFromScan(scanResult.text, '⚠️ DAMAGED');
+                                                }}
+                                                style={{ ...styles.primaryBtn, flex: 1, background: 'rgba(240, 68, 56, 0.15)', color: '#F04438', border: '1px solid rgba(240, 68, 56, 0.3)' }}
+                                            >
+                                                <AlertTriangle size={16} /> Log Damage
+                                            </button>
+                                        </div>
+                                    </div>
+                                )}
+
                                 <div style={{ display: 'flex', gap: '8px' }}>
                                     {scanResult.type === 'internal' && scanResult.exists && (
-                                        <button onClick={() => handleActionFromScan('switch')} style={styles.primaryBtn}>
-                                            Switch to Part
+                                        <button onClick={() => handleActionFromScan('switch')} style={styles.secondaryBtn}>
+                                            More Options
                                         </button>
                                     )}
                                     {scanResult.type === 'internal' && !scanResult.exists && (
@@ -920,7 +1173,10 @@ const MobileControls = ({ issueId, onReturn, onEventLogged, appMode, initialView
                     <span style={{ fontSize: '13px', opacity: 0.8 }}>
                         {lastAction === 'Part Added' ? 'New part added to inventory' :
                             lastAction === 'QR Sent to Printer' ? 'QR Code sent to local printer' :
-                                'Event logged successfully'}
+                                lastAction.includes('DAMAGED') ? `Logged DAMAGED status for ${issueId}` :
+                                    lastAction.includes('Cleared') ? `Logged Cleared for Race status for ${issueId}` :
+                                        lastAction.includes('Undone') ? lastAction :
+                                            `Logged ${lastAction.replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]/gu, '').trim()} status`}
                     </span>
                 </div>
             </div>
@@ -929,6 +1185,89 @@ const MobileControls = ({ issueId, onReturn, onEventLogged, appMode, initialView
                 <QrCode size={16} />
                 <span>Scan QR Code</span>
             </button>
+
+            {/* Floating Error Message - Bottom of Screen (Modern Style) */}
+            {floatingError && (
+                <div style={{
+                    position: 'fixed',
+                    bottom: '100px',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    background: 'rgba(240, 68, 56, 0.95)',
+                    color: 'white',
+                    padding: '14px 24px',
+                    borderRadius: '12px',
+                    boxShadow: '0 8px 32px rgba(240, 68, 56, 0.4)',
+                    zIndex: 9999,
+                    fontSize: '14px',
+                    fontWeight: 600,
+                    maxWidth: '90%',
+                    textAlign: 'center',
+                    animation: 'slideUp 0.3s ease-out'
+                }}>
+                    {floatingError}
+                    <button
+                        onClick={() => setFloatingError(null)}
+                        style={{
+                            marginLeft: '16px',
+                            background: 'rgba(255,255,255,0.2)',
+                            border: 'none',
+                            color: 'white',
+                            cursor: 'pointer',
+                            padding: '4px 8px',
+                            borderRadius: '4px',
+                            fontSize: '12px'
+                        }}
+                    >
+                        Dismiss
+                    </button>
+                </div>
+            )}
+
+            {/* Undo Toast - Shows after DAMAGED status with countdown */}
+            {undoToast && (
+                <div style={{
+                    position: 'fixed',
+                    bottom: '100px',
+                    left: '50%',
+                    transform: 'translateX(-50%)',
+                    background: 'rgba(30, 41, 59, 0.98)',
+                    color: 'white',
+                    padding: '16px 24px',
+                    borderRadius: '12px',
+                    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.4)',
+                    border: '1px solid rgba(255, 255, 255, 0.1)',
+                    zIndex: 9999,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '16px',
+                    minWidth: '300px'
+                }}>
+                    <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: '14px', fontWeight: 600 }}>
+                            Logged DAMAGED status for {undoToast.partKey}
+                        </div>
+                        <div style={{ fontSize: '12px', color: '#94A3B8', marginTop: '4px' }}>
+                            Disappears in {undoToast.countdown}s
+                        </div>
+                    </div>
+                    <button
+                        onClick={handleUndo}
+                        style={{
+                            background: 'rgba(0, 184, 217, 0.2)',
+                            border: '1px solid rgba(0, 184, 217, 0.4)',
+                            color: '#00B8D9',
+                            padding: '8px 16px',
+                            borderRadius: '6px',
+                            cursor: 'pointer',
+                            fontWeight: 600,
+                            fontSize: '13px'
+                        }}
+                    >
+                        UNDO
+                    </button>
+                </div>
+            )}
         </div>
     );
 };

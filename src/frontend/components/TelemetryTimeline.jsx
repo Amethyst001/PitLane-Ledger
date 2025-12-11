@@ -48,23 +48,8 @@ const getIconForStatus = (status) => {
 };
 
 const getColorForStatus = (status) => {
-    if (!status) return '#00B8D9';
-    const statusLower = status.toLowerCase();
-
-    if (statusLower.includes('damaged') || statusLower.includes('failed') || statusLower.includes('critical')) {
-        return '#F04438'; // Red
-    }
-    if (statusLower.includes('end of life') || statusLower.includes('retired') || statusLower.includes('scrapped') || statusLower.includes('wear') || statusLower.includes('warning')) {
-        return '#F79009'; // Orange
-    }
-    if (statusLower.includes('quality') || statusLower.includes('passed') || statusLower.includes('trackside') || statusLower.includes('inspection') || statusLower.includes('certified')) {
-        return '#00D084'; // Green
-    }
-    if (statusLower.includes('transit') || statusLower.includes('shipped')) {
-        return '#00A0DE'; // Blue
-    }
-
-    return '#00B8D9'; // Cyan (Default)
+    // UNIFIED CYAN-BLUE COLOR for all timeline icons (per user request - consistent texture)
+    return '#00B8D9'; // Cyan-blue for all statuses
 };
 
 const TelemetryTimeline = ({ history }) => {
@@ -74,7 +59,54 @@ const TelemetryTimeline = ({ history }) => {
         return text.replace(/[\u{1F300}-\u{1F9FF}]|[\u{2600}-\u{26FF}]|[\u{2700}-\u{27BF}]|[\u{1F600}-\u{1F64F}]|[\u{1F680}-\u{1F6FF}]|[\u{1F1E0}-\u{1F1FF}]|[\u{2B50}]|[\u{2705}]|[\u{26A0}]|[\u{2708}]|[\u{1F3C1}]|[\u{1F3ED}]|[\u{1F4E6}]|[\u{1F6A8}]|[\u{1F527}]/gu, '').trim();
     };
 
-    if (!Array.isArray(history) || history.length === 0) {
+    // Deduplicate CONSECUTIVE entries with same status within 5 minutes (accidental double-clicks)
+    const deduplicatedHistory = React.useMemo(() => {
+        if (!Array.isArray(history) || history.length === 0) return [];
+
+        // SORT by timestamp descending (most recent first)
+        const sorted = [...history].sort((a, b) =>
+            new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        );
+
+        const result = [];
+        const FIVE_MINUTES_MS = 5 * 60 * 1000;
+
+        for (let i = 0; i < sorted.length; i++) {
+            const current = sorted[i];
+            const prev = result[result.length - 1];
+
+            // If no previous, or different status, add it
+            if (!prev) {
+                result.push(current);
+                continue;
+            }
+
+            // Normalize statuses for comparison (remove emojis, lowercase)
+            const currentStatus = stripEmojis(current.status || '').toLowerCase();
+            const prevStatus = stripEmojis(prev.status || '').toLowerCase();
+
+            // If statuses are different, add it
+            if (currentStatus !== prevStatus) {
+                result.push(current);
+                continue;
+            }
+
+            // Same status - check time difference
+            const currentTime = new Date(current.timestamp).getTime();
+            const prevTime = new Date(prev.timestamp).getTime();
+            const timeDiff = Math.abs(currentTime - prevTime);
+
+            // If more than 5 minutes apart, it's a legitimate re-entry, add it
+            if (timeDiff > FIVE_MINUTES_MS) {
+                result.push(current);
+            }
+            // Otherwise skip (duplicate within 5 minutes)
+        }
+
+        return result;
+    }, [history]);
+
+    if (deduplicatedHistory.length === 0) {
         return (
             <div style={{ textAlign: 'center', padding: '48px 24px', color: 'var(--color-text-muted)' }}>
                 No telemetry data available
@@ -84,7 +116,7 @@ const TelemetryTimeline = ({ history }) => {
 
     return (
         <VerticalTimeline lineColor="var(--color-border-neon)" layout="1-column-left" animate={true}>
-            {history.map((event) => {
+            {deduplicatedHistory.map((event) => {
                 const color = getColorForStatus(event.status);
                 const displayStatus = stripEmojis(event.status);
 
