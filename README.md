@@ -2,8 +2,6 @@
 **Codegeist 2025: Williams Racing Edition**  
 *Enterprise Asset Management & AI Operations for Formula 1*
 
-![PitLane Ledger Dashboard](https://media.giphy.com/media/v1.Y2lkPTc5MGI3NjEx.../giphy.gif)
-
 ## 🏁 The Problem
 In modern F1 operations, every second and every gram counts. Teams struggle with:
 - **Fragmented Data**: Inventory in spreadsheets, telemetry in databases, logistics in emails.
@@ -130,5 +128,5 @@ For **PROD Mode**, upload your inventory using this CSV format:
 
 ---
 
-*Built with ❤️ for Williams Racing | Atlassian Codegeist 2025*
+*Built by Amethyst for Williams Racing | Atlassian Codegeist 2025*
 
