@@ -1,0 +1,238 @@
+/**
+ * PitLane Ledger - Global Styles
+ * Williams Racing Modern Design System
+ */
+
+:root {
+  /* === COLORS === */
+  /* Backgrounds */
+  --color-bg-primary: #0A0E1A;
+  --color-bg-surface: #151B2E;
+  --color-bg-surface-alt: #1F2937;
+  --color-bg-overlay: rgba(10, 14, 26, 0.95);
+
+  /* Text */
+  --color-text-primary: #F0F4F8;
+  --color-text-secondary: #94A3B8;
+  --color-text-muted: #64748B;
+
+  /* Accents */
+  --color-accent-cyan: #00B8D9;
+  --color-accent-blue: #0066CA;
+  --color-accent-sky: #00A0DE;
+  --color-accent-purple: #8B5CF6;
+  /* In Transit */
+
+  /* Semantic */
+  --color-success: #00D084;
+  --color-warning: #F59E0B;
+  --color-danger: #F04438;
+  --color-status-retired: #475569;
+  /* Muted Grey for Retired/Scrapped */
+
+  /* Borders */
+  --color-border-subtle: #1E293B;
+  --color-border-neon: #00B8D9;
+
+  /* === SHADOWS === */
+  --shadow-soft: 0 4px 6px rgba(0, 0, 0, 0.3), 0 2px 4px rgba(0, 0, 0, 0.2);
+  --shadow-neon: 0 0 20px rgba(0, 184, 217, 0.4);
+  --shadow-neon-hover: 0 0 30px rgba(0, 184, 217, 0.6);
+  --shadow-critical: 0 0 20px rgba(240, 68, 56, 0.4);
+  /* Red Neon Glow */
+
+  /* === TYPOGRAPHY === */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-mono: 'Fira Code', 'Courier New', monospace;
+
+  /* === SPACING === */
+  --spacing-xs: 4px;
+  --spacing-sm: 8px;
+  --spacing-md: 16px;
+  --spacing-lg: 24px;
+  --spacing-xl: 32px;
+
+  /* === BORDER RADIUS === */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 20px;
+
+  /* === TRANSITIONS === */
+  --transition-fast: 0.1s ease;
+  --transition-normal: 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-slow: 0.3s ease;
+
+  /* === GLASSMORPHISM === */
+  --glass-bg: rgba(21, 27, 46, 0.7);
+  --glass-border: rgba(255, 255, 255, 0.1);
+
+  /* Force dark theme for native controls */
+  color-scheme: dark;
+}
+
+/* === GLOBAL RESETS === */
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--color-text-primary);
+  background-color: var(--color-bg-primary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+
+  /* Dynamic viewport scaling - calculated by App.jsx */
+  zoom: var(--dynamic-scale, 1);
+}
+
+/* === UTILITY CLASSES === */
+
+/* Glassmorphism */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px) saturate(150%);
+  -webkit-backdrop-filter: blur(12px) saturate(150%);
+  border: 1px solid var(--glass-border);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.1);
+}
+
+/* Gradient Text */
+.gradient-text {
+  background: linear-gradient(135deg, var(--color-accent-cyan) 0%, var(--color-accent-blue) 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  color: transparent;
+}
+
+/* Pulsing Animation */
+@keyframes pulse {
+
+  0%,
+  100% {
+    opacity: 1;
+  }
+
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.pulse {
+  animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+}
+
+/* Red Neon Pulse for Critical Alerts */
+@keyframes neonPulseRed {
+
+  0%,
+  100% {
+    box-shadow: 0 0 10px rgba(240, 68, 56, 0.4);
+  }
+
+  50% {
+    box-shadow: 0 0 20px rgba(240, 68, 56, 0.8);
+  }
+}
+
+.critical-glow {
+  animation: neonPulseRed 1.5s infinite alternate;
+}
+
+/* Focus Indicator */
+.focusable:focus-visible {
+  outline: 2px solid var(--color-accent-cyan);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* Hover Effects */
+.hover-lift {
+  transition: all var(--transition-normal);
+}
+
+.hover-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-neon);
+}
+
+/* Loading Shimmer */
+@keyframes shimmer {
+  0% {
+    background-position: 200% 0;
+  }
+
+  100% {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes spin {
+  from {
+    transform: rotate(0deg);
+  }
+
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.shimmer {
+  background: linear-gradient(90deg,
+      var(--color-bg-surface) 0%,
+      var(--color-bg-surface-alt) 50%,
+      var(--color-bg-surface) 100%);
+  background-size: 200% 100%;
+  animation: shimmer 1.5s infinite;
+  border-radius: var(--radius-md);
+}
+
+/* === DRIVER BADGES === */
+.badge-albon {
+  background: rgba(0, 102, 202, 0.15);
+  color: var(--color-accent-blue);
+  border: 1px solid rgba(0, 102, 202, 0.3);
+}
+
+.badge-sainz {
+  background: rgba(245, 158, 11, 0.15);
+  color: var(--color-warning);
+  border: 1px solid rgba(245, 158, 11, 0.3);
+}
+
+/* === CUSTOM SCROLLBAR === */
+/* Webkit (Chrome, Edge, Safari) */
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--color-bg-primary);
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: var(--color-bg-surface-alt);
+  border: 3px solid var(--color-bg-primary);
+  border-radius: 12px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: var(--color-text-secondary);
+}
+
+/* Firefox */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-bg-surface-alt) var(--color-bg-primary);
+}

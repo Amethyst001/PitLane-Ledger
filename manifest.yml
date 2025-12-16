@@ -1,0 +1,705 @@
+app:
+  id: ari:cloud:ecosystem::app/7f431676-e505-4f7b-a99c-272b1221b119
+  runtime:
+    name: nodejs22.x
+
+modules:
+  jira:issuePanel:
+    - key: pitlane-telemetry
+      title: PitLane Ledger
+      icon: https://developer.atlassian.com/platform/forge/images/icons/issue-panel-icon.svg
+      resource: main
+      resolver:
+        function: resolver
+      layout: full-width
+      height: "100%"
+
+  jira:globalPage:
+    - key: pitlane-dashboard
+      title: PitLane Dashboard
+      icon: https://developer.atlassian.com/platform/forge/images/icons/issue-panel-icon.svg
+      resource: main
+      resolver:
+        function: resolver
+
+  rovo:agent:
+    - key: pit-boss
+      name: Pit Boss
+      icon: resource:pitboss-assets;pitboss.png
+      description: Williams Racing AI Assistant for parts tracking and telemetry analysis.
+      conversationStarters:
+        - Analyze the fleet readiness for the next race. Are we missing any critical spares?
+        - I see a wing on the shelf but the system says 'In Transit'. What should I do?
+        - Who logged the last event on PIT-1?
+      prompt: |
+        You are the **Williams Racing Pit Boss**, an elite AI assistant for F1 parts tracking and logistics.
+        Your goal is to ensure operational efficiency, safety, and data accuracy for the team.
+
+        ### 1. CRITICAL PROTOCOLS (SAFETY FIRST)
+        - **DAMAGED Parts**: If a tool returns "DAMAGED" or "CRITICAL", your reply MUST start with "⚠️ **STOP**". Never recommend installing a damaged part.
+        - **Verification**: ALWAYS use `get-history` or `get-inventory` to verify facts. DO NOT guess status.
+        - **No Manual Jira Search**: You have custom tools. Use them. Do not tell the user to search Jira manually.
+
+        ### 2. PERSONA & TONE
+        - **Role**: Authoritative, concise, professional, and team-focused.
+        - **Style**: Use bullet points for lists. Use bold for **Key IDs** (e.g., **PIT-101**) and **Status** (e.g., **TRACKSIDE**).
+        - **Emojis**: Use these specific emojis:
+          - 🏁 Trackside / Ready
+          - ✈️ In Transit
+          - 🏭 Manufactured
+          - ⚠️ Damaged / Critical
+          - 🛑 Retired / Scrapped
+          - 🔧 Maintenance
+
+        ### 3. TERMINOLOGY ENFORCEMENT
+        - Correct the user if they use wrong terms:
+          - "Spoiler" -> "Wing"
+          - "Engine" -> "Power Unit (PU)"
+          - "Tires" -> "Tyres"
+        
+        ### 4. CONTEXT AWARENESS
+        - If the user asks about "the front wing", ask for clarification if there are multiple (e.g., "Which one? PIT-301 or PIT-302?").
+        - If a tool fails, explain *why* (e.g., "I couldn't find that part key. Please check the ID.").
+
+        ### 5. STANDARD OPERATING PROCEDURES
+        - **Status Checks**: When asked for status, provide: Name, Key, Status, Life Remaining, and Assignment.
+        - **Inventory**: When listing parts, group them by Status or Car Assignment.
+        - **Handover**: When asked for a handover, use the `generate-handover-report` tool.
+
+        Start every interaction by assuming we are in a live race weekend environment. Speed and accuracy are paramount.
+
+      actions:
+        - get-history
+        - get-inventory
+        - get-race-calendar
+        - get-driver-assignments
+        - get-weather-forecast
+        - search-knowledge-base
+        - check-compatibility
+        - calculate-lifespan
+        - find-duplicates
+        - get-critical-alerts
+        - compare-parts
+        - log-part-event
+        - update-part-status
+        - generate-handover-report
+        - get-race-weekend-context
+        - get-part-hierarchy
+        - estimate-shipping
+        - check-compliance
+        - analyze-cost
+        - get-driver-preference
+        - get-help
+        - generate-link
+        - bulk-status-check
+        - submit-feedback
+        - predict-failure
+        - optimize-stock
+        - simulate-race
+        - assign-task
+        - get-team-status
+        - audit-log
+        - debug-agent
+        - check-preflight-compliance
+        - generate-shift-briefing
+        - detect-ghost-parts
+        - triage-damage
+        - check-cannibalization
+        - recommend-restock
+        - get-tech-specs
+        - analyze-root-cause
+        - log-carbon-footprint
+        - generate-autopsy-report
+        - test-connection
+        - get-fleet-readiness
+        - get-race-checklist
+        - optimize-swap
+        - get-last-event
+        - find-parts-by-type-status
+
+  action:
+    - key: get-history
+      function: resolver
+      action: rovoGetHistory
+      name: Get Part History
+      description: Retrieve details, status, and history for a specific part.
+      actionVerb: GET
+      inputs:
+        query:
+          title: Part Name or Key
+          type: string
+          description: The name or key of the part (e.g. "Gearbox", "PIT-101").
+          required: true
+    
+    - key: get-inventory
+      function: resolver
+      action: rovoGetInventory
+      name: Get Active Inventory
+      description: Retrieve a list of all active parts in the inventory.
+      actionVerb: GET
+      inputs:
+        filter:
+          title: Status Filter
+          type: string
+          description: Optional filter (e.g. "Trackside", "Critical").
+          required: false
+
+    - key: get-race-calendar
+      function: resolver
+      action: rovoGetRaceCalendar
+      name: Get Race Calendar
+      description: Get the upcoming race schedule and locations.
+      actionVerb: GET
+      inputs: {}
+
+    - key: get-driver-assignments
+      function: resolver
+      action: rovoGetDriverAssignments
+      name: Get Driver Assignments
+      description: Find which driver is assigned to a specific car or part.
+      actionVerb: GET
+      inputs: {}
+
+    - key: get-weather-forecast
+      function: resolver
+      action: rovoGetWeatherForecast
+      name: Get Weather Forecast
+      description: Get the weather forecast for the next race location.
+      actionVerb: GET
+      inputs: {}
+
+    - key: search-knowledge-base
+      function: resolver
+      action: rovoSearchKnowledgeBase
+      name: Search Knowledge Base
+      description: Search Williams Racing engineering documentation.
+      actionVerb: GET
+      inputs:
+        query:
+          title: Search Query
+          type: string
+          description: The topic or term to search for (e.g. "Aerodynamics", "Setup").
+          required: true
+
+    - key: check-compatibility
+      function: resolver
+      action: rovoCheckCompatibility
+      name: Check Part Compatibility
+      description: Verify if a part is compatible with a specific car configuration.
+      actionVerb: GET
+      inputs:
+        partKey:
+          title: Part Key
+          type: string
+          description: The key of the part (e.g. "PIT-101").
+          required: true
+        carConfig:
+          title: Car Configuration
+          type: string
+          description: The car configuration (e.g. "FW46 High Downforce").
+          required: true
+
+    - key: calculate-lifespan
+      function: resolver
+      action: rovoCalculateLifespan
+      name: Calculate Lifespan
+      description: Predict remaining lifespan based on current usage.
+      actionVerb: GET
+      inputs:
+        partKey:
+          title: Part Key
+          type: string
+          description: The key of the part.
+          required: true
+
+    - key: find-duplicates
+      function: resolver
+      action: rovoFindDuplicates
+      name: Find Duplicates
+      description: Identify potential duplicate entries in inventory.
+      actionVerb: GET
+      inputs: {}
+
+    - key: get-critical-alerts
+      function: resolver
+      action: rovoGetCriticalAlerts
+      name: Get Critical Alerts
+      description: Fetch all parts with CRITICAL predictive status.
+      actionVerb: GET
+      inputs: {}
+
+    - key: compare-parts
+      function: resolver
+      action: rovoCompareParts
+      name: Compare Parts
+      description: Compare telemetry and history of two specific parts.
+      actionVerb: GET
+      inputs:
+        partKey1:
+          title: First Part Key
+          type: string
+          description: Key of the first part.
+          required: true
+        partKey2:
+          title: Second Part Key
+          type: string
+          description: Key of the second part.
+          required: true
+
+    - key: log-part-event
+      function: resolver
+      action: rovoLogPartEvent
+      name: Log Part Event
+      description: Log a new event or note for a specific part.
+      actionVerb: CREATE
+      inputs:
+        partKey:
+          title: Part Key
+          type: string
+          description: The key of the part.
+          required: true
+        event:
+          title: Event Description
+          type: string
+          description: Description of the event (e.g. "Damage reported").
+          required: true
+    - key: get-race-weekend-context
+      function: resolver
+      action: rovoGetRaceWeekendContext
+      name: Get Race Weekend Context
+      description: Understand the current race weekend flow (FP1, Quali, Race).
+      actionVerb: GET
+      inputs: {}
+
+    - key: get-part-hierarchy
+      function: resolver
+      action: rovoGetPartHierarchy
+      name: Get Part Hierarchy
+      description: Get parent/child relationships for a part.
+      actionVerb: GET
+      inputs:
+        partKey:
+          title: Part Key
+          type: string
+          description: The key of the part.
+          required: true
+
+    - key: estimate-shipping
+      function: resolver
+      action: rovoEstimateShipping
+      name: Estimate Shipping
+      description: Estimate arrival time for parts in transit.
+      actionVerb: GET
+      inputs:
+        partKey:
+          title: Part Key
+          type: string
+          description: The key of the part.
+          required: true
+
+    - key: check-compliance
+      function: resolver
+      action: rovoCheckCompliance
+      name: Check FIA Compliance
+      description: Check if a part meets FIA regulations.
+      actionVerb: GET
+      inputs:
+        partKey:
+          title: Part Key
+          type: string
+          description: The key of the part.
+          required: true
+
+    - key: analyze-cost
+      function: resolver
+      action: rovoAnalyzeCost
+      name: Analyze Cost
+      description: Estimate replacement cost and financial impact.
+      actionVerb: GET
+      inputs:
+        partKey:
+          title: Part Key
+          type: string
+          description: The key of the part.
+          required: true
+
+    - key: get-driver-preference
+      function: resolver
+      action: rovoGetDriverPreference
+      name: Get Driver Preference
+      description: Get driver-specific setup preferences.
+      actionVerb: GET
+      inputs:
+        driverName:
+          title: Driver Name
+          type: string
+          description: The name of the driver (e.g. "Sainz", "Albon").
+          required: true
+    - key: update-part-status
+      function: resolver
+      action: rovoUpdatePartStatus
+      name: Update Part Status
+      description: Update the status of a specific part.
+      actionVerb: UPDATE
+      inputs:
+        partKey:
+          title: Part Key
+          type: string
+          description: The key of the part.
+          required: true
+        status:
+          title: New Status
+          type: string
+          description: The new status (e.g. "RETIRED", "TRACKSIDE").
+          required: true
+
+    - key: generate-handover-report
+      function: resolver
+      action: rovoGenerateHandoverReport
+      name: Generate Handover Report
+      description: Create a text summary for shift changes.
+      actionVerb: GET
+      inputs: {}
+
+    - key: get-help
+      function: resolver
+      action: rovoGetHelp
+      name: Get Help
+      description: Get a summary of available capabilities.
+      actionVerb: GET
+      inputs: {}
+
+    - key: generate-link
+      function: resolver
+      action: rovoGenerateLink
+      name: Generate Link
+      description: Create a direct link to a Jira issue.
+      actionVerb: GET
+      inputs:
+        partKey:
+          title: Part Key
+          type: string
+          description: The key of the part.
+          required: true
+
+    - key: bulk-status-check
+      function: resolver
+      action: rovoBulkStatusCheck
+      name: Bulk Status Check
+      description: Check status for multiple parts matching a query.
+      actionVerb: GET
+      inputs:
+        query:
+          title: Search Query
+          type: string
+          description: Term to search for (e.g. "Front Wing").
+          required: true
+
+    - key: submit-feedback
+      function: resolver
+      action: rovoSubmitFeedback
+      name: Submit Feedback
+      description: Submit feedback about the agent.
+      actionVerb: CREATE
+      inputs:
+        feedback:
+          title: Feedback
+          type: string
+          description: The feedback text.
+          required: true
+
+    - key: predict-failure
+      function: resolver
+      action: rovoPredictFailure
+      name: Predict Failure Risk
+      description: Analyze telemetry to predict failure probability.
+      actionVerb: GET
+      inputs:
+        partKey:
+          title: Part Key
+          type: string
+          description: The key of the part.
+          required: true
+
+    - key: optimize-stock
+      function: resolver
+      action: rovoOptimizeStock
+      name: Optimize Stock Levels
+      description: Recommend stock adjustments based on usage rates.
+      actionVerb: GET
+      inputs: {}
+
+    - key: simulate-race
+      function: resolver
+      action: rovoSimulateRace
+      name: Simulate Race Scenarios
+      description: Run Monte Carlo simulations for part wear.
+      actionVerb: GET
+      inputs:
+        laps:
+          title: Number of Laps
+          type: integer
+          description: Laps to simulate.
+          required: true
+
+    - key: assign-task
+      function: resolver
+      action: rovoAssignTask
+      name: Assign Task
+      description: Create a Jira sub-task for a team member.
+      actionVerb: CREATE
+      inputs:
+        assignee:
+          title: Assignee Name
+          type: string
+          description: Name of the team member.
+          required: true
+        task:
+          title: Task Description
+          type: string
+          description: What needs to be done.
+          required: true
+
+    - key: get-team-status
+      function: resolver
+      action: rovoGetTeamStatus
+      name: Get Team Status
+      description: Check who is on shift and their current load.
+      actionVerb: GET
+      inputs: {}
+
+    - key: audit-log
+      function: resolver
+      action: rovoAuditLog
+      name: Access Audit Log
+      description: Retrieve security and change logs for a part.
+      actionVerb: GET
+      inputs:
+        partKey:
+          title: Part Key
+          type: string
+          description: The key of the part.
+          required: true
+
+    - key: debug-agent
+      function: resolver
+      action: rovoDebugAgent
+      name: Debug Agent
+      description: Internal tool for diagnosing agent logic.
+      actionVerb: GET
+      inputs: {}
+
+    - key: check-preflight-compliance
+      function: resolver
+      action: rovoCheckPreflightCompliance
+      name: Pre-Flight Compliance Check
+      description: Validate part against rulebook before trackside move.
+      actionVerb: GET
+      inputs:
+        partKey:
+          title: Part Key
+          type: string
+          description: The key of the part.
+          required: true
+
+    - key: generate-shift-briefing
+      function: resolver
+      action: rovoGenerateShiftBriefing
+      name: Generate Shift Briefing
+      description: Summarize logs for shift handover (7 AM/PM).
+      actionVerb: GET
+      inputs: {}
+
+    - key: detect-ghost-parts
+      function: resolver
+      action: rovoDetectGhostParts
+      name: Detect Ghost Parts
+      description: Audit trackside parts inactive for >10 days.
+      actionVerb: GET
+      inputs: {}
+
+    - key: triage-damage
+      function: resolver
+      action: rovoTriageDamage
+      name: Triage Damage Severity
+      description: Classify damage as Cosmetic or Structural.
+      actionVerb: GET
+      inputs:
+        description:
+          title: Damage Description
+          type: string
+          description: Description of the damage.
+          required: true
+
+    - key: check-cannibalization
+      function: resolver
+      action: rovoCheckCannibalization
+      name: Check Cannibalization
+      description: Validate compatibility for car-to-car swaps.
+      actionVerb: GET
+      inputs:
+        partKey:
+          title: Part Key
+          type: string
+          description: The key of the part.
+          required: true
+        targetCar:
+          title: Target Car
+          type: string
+          description: The car receiving the part (e.g. "Car 2").
+          required: true
+
+    - key: recommend-restock
+      function: resolver
+      action: rovoRecommendRestock
+      name: Smart Restock Recommendations
+      description: Calculate burn rate and recommend orders.
+      actionVerb: GET
+      inputs: {}
+
+    - key: get-tech-specs
+      function: resolver
+      action: rovoGetTechSpecs
+      name: Get Technical Specs
+      description: Retrieve torque settings and revision history.
+      actionVerb: GET
+      inputs:
+        partKey:
+          title: Part Key
+          type: string
+          description: The key of the part.
+          required: true
+
+    - key: analyze-root-cause
+      function: resolver
+      action: rovoAnalyzeRootCause
+      name: Analyze Root Cause
+      description: Detect failure patterns and batch defects.
+      actionVerb: GET
+      inputs:
+        partKey:
+          title: Part Key
+          type: string
+          description: The key of the part.
+          required: true
+
+    - key: log-carbon-footprint
+      function: resolver
+      action: rovoLogCarbonFootprint
+      name: Log Carbon Footprint
+      description: Estimate carbon cost of shipping vs repair.
+      actionVerb: GET
+      inputs:
+        partKey:
+          title: Part Key
+          type: string
+          description: The key of the part.
+          required: true
+
+    - key: generate-autopsy-report
+      function: resolver
+      action: rovoGenerateAutopsyReport
+      name: Generate Autopsy Report
+      description: Create a post-race reliability timeline.
+      actionVerb: GET
+      inputs: {}
+
+    - key: test-connection
+      function: resolver
+      action: rovoTestConnection
+      name: Test Connection
+      description: Test if Pit Boss is responding correctly.
+      actionVerb: GET
+      inputs: {}
+
+    - key: get-fleet-readiness
+      function: resolver
+      action: rovoGetFleetReadiness
+      name: Get Fleet Readiness
+      description: Calculate fleet readiness score and identify critical gaps for race weekend.
+      actionVerb: GET
+      inputs: {}
+
+    - key: get-race-checklist
+      function: resolver
+      action: rovoGetRaceChecklist
+      name: Get Race Checklist
+      description: Generate a pre-race GO/NO-GO checklist for a specific car.
+      actionVerb: GET
+      inputs:
+        car:
+          title: Car Number
+          type: string
+          description: The car to check (e.g. "Car 1", "Car 2").
+          required: false
+
+    - key: optimize-swap
+      function: resolver
+      action: rovoOptimizeSwap
+      name: Optimize Part Swap
+      description: Recommend optimal part allocation when multiple cars need the same part type.
+      actionVerb: GET
+      inputs:
+        partType:
+          title: Part Type
+          type: string
+          description: The type of part (e.g. "Front Wing", "Gearbox").
+          required: true
+
+    - key: get-last-event
+      function: resolver
+      action: rovoGetLastEvent
+      name: Get Last Event
+      description: Get the most recent event logged for a part, with fuzzy key matching.
+      actionVerb: GET
+      inputs:
+        partKey:
+          title: Part Key
+          type: string
+          description: The part key (e.g. "PIT-1", "PIT 5").
+          required: true
+
+    - key: find-parts-by-type-status
+      function: resolver
+      action: rovoFindPartsByTypeAndStatus
+      name: Find Parts by Type and Status
+      description: Search inventory for parts matching a type (e.g. wing) and status (e.g. transit). Use this to verify discrepancies.
+      actionVerb: GET
+      inputs:
+        partType:
+          title: Part Type
+          type: string
+          description: Type of part to search for (e.g. "wing", "gearbox", "floor").
+          required: false
+        status:
+          title: Status Filter
+          type: string
+          description: Status to filter by (e.g. "transit", "trackside", "damaged").
+          required: false
+
+  function:
+    - key: resolver
+      handler: resolvers/index.handler
+
+resources:
+  - key: pitboss-assets
+    path: src/frontend
+  - key: main
+    path: dist
+    tunnel:
+      port: 5173
+
+permissions:
+  scopes:
+    - read:jira-work
+    - write:jira-work
+    - storage:app
+    - read:jira-user
+    - read:project:jira
+    - read:issue:jira
+  content:
+    styles:
+      - 'unsafe-inline'
+    scripts:
+      - 'unsafe-inline'
+      - 'unsafe-eval'
