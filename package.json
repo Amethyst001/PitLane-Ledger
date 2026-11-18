@@ -1,0 +1,32 @@
+{
+  "name": "pitlane-ledger",
+  "version": "1.0.0",
+  "description": "Williams Racing Parts Passport - F1 Part Tracking on Forge",
+  "author": "Williams Racing F1",
+  "license": "MIT",
+  "scripts": {
+    "build": "vite build",
+    "dev": "vite",
+    "deploy": "npm run build && forge deploy",
+    "tunnel": "npm run build && forge tunnel"
+  },
+  "dependencies": {
+    "@forge/api": "^6.4.0",
+    "@forge/bridge": "^3.4.0",
+    "@forge/react": "^10.0.0",
+    "@forge/resolver": "^1.7.1",
+    "framer-motion": "^10.16.0",
+    "html5-qrcode": "^2.3.8",
+    "lucide-react": "^0.294.0",
+    "qr-scanner": "^1.4.2",
+    "qrcode.react": "^3.1.0",
+    "react": "^18.2.0",
+    "react-dom": "^18.2.0",
+    "react-vertical-timeline-component": "^3.6.0"
+  },
+  "devDependencies": {
+    "@forge/cli": "^12.10.0",
+    "@vitejs/plugin-react": "^4.2.1",
+    "vite": "^5.0.12"
+  }
+}
